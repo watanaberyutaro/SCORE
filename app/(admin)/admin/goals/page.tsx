@@ -18,27 +18,29 @@ async function getAdminGoalsData() {
     .select(`
       *,
       staff:users!staff_goals_staff_id_fkey(id, full_name, email),
-      approved_by_user:users!staff_goals_approved_by_fkey(full_name),
-      monthly_feedbacks:goal_monthly_feedbacks(count)
+      reviewer:users!staff_goals_reviewed_by_fkey(full_name)
     `)
     .order('created_at', { ascending: false })
 
   return { goals: goals || [] }
 }
 
-function getStatusBadge(status: string) {
+function getInterviewStatusBadge(status: string) {
   const statusConfig: Record<string, { label: string; className: string }> = {
-    draft: { label: '下書き', className: 'bg-gray-200 text-black border-2 border-gray-300' },
-    submitted: { label: '提出済み', className: 'bg-[#1ed7cd] text-black border-2 border-[#1ed7cd] font-bold' },
-    under_review: { label: '確認中', className: 'bg-[#18c4b8] text-black border-2 border-[#18c4b8] font-bold' },
-    approved: { label: '承認済み', className: 'bg-[#05a7be] text-black border-2 border-[#05a7be] font-bold' },
-    active: { label: '進行中', className: 'bg-[#087ea2] text-black border-2 border-[#087ea2] font-bold' },
-    completed: { label: '完了', className: 'bg-[#017598] text-white border-2 border-[#017598] font-bold' },
-    cancelled: { label: 'キャンセル', className: 'bg-gray-400 text-white border-2 border-gray-400' },
-    before_interview: { label: '面談前', className: 'bg-[#1ed7cd] text-black border-2 border-[#1ed7cd] font-bold' },
-    after_interview: { label: '面談済み', className: 'bg-[#05a7be] text-white border-2 border-[#05a7be] font-bold' },
+    pending: { label: '面談前', className: 'bg-yellow-100 text-yellow-800 border-2 border-yellow-300' },
+    scheduled: { label: '面談予定', className: 'bg-blue-100 text-blue-800 border-2 border-blue-300' },
+    completed: { label: '面談済み', className: 'bg-green-100 text-green-800 border-2 border-green-300' },
   }
-  return statusConfig[status] || statusConfig.draft
+  return statusConfig[status] || statusConfig.pending
+}
+
+function getGoalStatusBadge(status: string) {
+  const statusConfig: Record<string, { label: string; className: string }> = {
+    active: { label: '進行中', className: 'bg-[#087ea2] text-white border-2 border-[#087ea2]' },
+    completed: { label: '完了', className: 'bg-[#017598] text-white border-2 border-[#017598]' },
+    abandoned: { label: '中止', className: 'bg-gray-400 text-white border-2 border-gray-400' },
+  }
+  return statusConfig[status] || { label: status, className: 'bg-gray-200 text-black border-2 border-gray-300' }
 }
 
 export default async function AdminGoalsPage() {
@@ -50,13 +52,14 @@ export default async function AdminGoalsPage() {
 
   const data = await getAdminGoalsData()
 
-  // ステータスごとに目標を分類
-  const submittedGoals = data.goals.filter(g => g.status === 'submitted' || g.status === 'under_review')
+  // 面談ステータスごとに目標を分類
+  const pendingInterviewGoals = data.goals.filter(g => g.interview_status === 'pending')
+  const scheduledInterviewGoals = data.goals.filter(g => g.interview_status === 'scheduled')
+  const completedInterviewGoals = data.goals.filter(g => g.interview_status === 'completed')
+
+  // 目標の進捗ステータスごとに分類
   const activeGoals = data.goals.filter(g => g.status === 'active')
-  const approvedGoals = data.goals.filter(g => g.status === 'approved')
   const completedGoals = data.goals.filter(g => g.status === 'completed')
-  const beforeInterviewGoals = data.goals.filter(g => g.status === 'before_interview')
-  const afterInterviewGoals = data.goals.filter(g => g.status === 'after_interview')
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 lg:py-8">
@@ -69,47 +72,47 @@ export default async function AdminGoalsPage() {
 
       {/* 統計サマリー */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:gap-6 lg:grid-cols-4 mb-6 lg:mb-8">
-        <Card className="border-2 transition-shadow hover:shadow-lg" style={{ borderColor: '#087ea2' }}>
+        <Card className="border-2 transition-shadow hover:shadow-lg" style={{ borderColor: '#f59e0b' }}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 lg:pb-2 p-3 lg:p-6">
-            <CardTitle className="text-xs lg:text-sm font-medium text-black leading-tight">進行中</CardTitle>
-            <Target className="h-5 w-5" style={{ color: '#087ea2' }} />
+            <CardTitle className="text-xs lg:text-sm font-medium text-black leading-tight">面談前</CardTitle>
+            <Clock className="h-5 w-5" style={{ color: '#f59e0b' }} />
           </CardHeader>
           <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
-            <div className="text-2xl lg:text-3xl font-bold text-black">{activeGoals.length}</div>
-            <p className="text-[10px] lg:text-xs text-black mt-0.5 lg:mt-1">進行中の目標</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-2 transition-shadow hover:shadow-lg" style={{ borderColor: '#017598' }}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 lg:pb-2 p-3 lg:p-6">
-            <CardTitle className="text-xs lg:text-sm font-medium text-black leading-tight">完了</CardTitle>
-            <FileText className="h-4 w-4 lg:h-5 lg:w-5" style={{ color: '#017598' }} />
-          </CardHeader>
-          <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
-            <div className="text-2xl lg:text-3xl font-bold text-black">{completedGoals.length}</div>
-            <p className="text-[10px] lg:text-xs text-black mt-0.5 lg:mt-1">達成された目標</p>
+            <div className="text-2xl lg:text-3xl font-bold text-black">{pendingInterviewGoals.length}</div>
+            <p className="text-[10px] lg:text-xs text-black mt-0.5 lg:mt-1">レビュー待ち</p>
           </CardContent>
         </Card>
 
         <Card className="border-2 transition-shadow hover:shadow-lg" style={{ borderColor: '#1ed7cd' }}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 lg:pb-2 p-3 lg:p-6">
-            <CardTitle className="text-xs lg:text-sm font-medium text-black leading-tight">面談前</CardTitle>
+            <CardTitle className="text-xs lg:text-sm font-medium text-black leading-tight">面談予定</CardTitle>
             <CalendarCheck className="h-4 w-4 lg:h-5 lg:w-5" style={{ color: '#1ed7cd' }} />
           </CardHeader>
           <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
-            <div className="text-2xl lg:text-3xl font-bold text-black">{beforeInterviewGoals.length}</div>
-            <p className="text-[10px] lg:text-xs text-black mt-0.5 lg:mt-1">面談前の目標</p>
+            <div className="text-2xl lg:text-3xl font-bold text-black">{scheduledInterviewGoals.length}</div>
+            <p className="text-[10px] lg:text-xs text-black mt-0.5 lg:mt-1">面談予定の目標</p>
           </CardContent>
         </Card>
 
-        <Card className="border-2 transition-shadow hover:shadow-lg" style={{ borderColor: '#18c4b8' }}>
+        <Card className="border-2 transition-shadow hover:shadow-lg" style={{ borderColor: '#10b981' }}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 lg:pb-2 p-3 lg:p-6">
             <CardTitle className="text-xs lg:text-sm font-medium text-black leading-tight">面談済み</CardTitle>
-            <MessageCircle className="h-4 w-4 lg:h-5 lg:w-5" style={{ color: '#18c4b8' }} />
+            <CheckCircle className="h-4 w-4 lg:h-5 lg:w-5" style={{ color: '#10b981' }} />
           </CardHeader>
           <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
-            <div className="text-2xl lg:text-3xl font-bold text-black">{afterInterviewGoals.length}</div>
-            <p className="text-[10px] lg:text-xs text-black mt-0.5 lg:mt-1">面談済みの目標</p>
+            <div className="text-2xl lg:text-3xl font-bold text-black">{completedInterviewGoals.length}</div>
+            <p className="text-[10px] lg:text-xs text-black mt-0.5 lg:mt-1">面談完了した目標</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-2 transition-shadow hover:shadow-lg" style={{ borderColor: '#087ea2' }}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 lg:pb-2 p-3 lg:p-6">
+            <CardTitle className="text-xs lg:text-sm font-medium text-black leading-tight">全目標</CardTitle>
+            <Target className="h-4 w-4 lg:h-5 lg:w-5" style={{ color: '#087ea2' }} />
+          </CardHeader>
+          <CardContent className="p-3 pt-0 lg:p-6 lg:pt-0">
+            <div className="text-2xl lg:text-3xl font-bold text-black">{data.goals.length}</div>
+            <p className="text-[10px] lg:text-xs text-black mt-0.5 lg:mt-1">全ての目標</p>
           </CardContent>
         </Card>
       </div>
@@ -123,32 +126,32 @@ export default async function AdminGoalsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="active" className="w-full">
+          <Tabs defaultValue="pending" className="w-full">
             <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="active">
-                進行中 ({activeGoals.length})
+              <TabsTrigger value="pending">
+                面談前 ({pendingInterviewGoals.length})
               </TabsTrigger>
-              <TabsTrigger value="before_interview">
-                面談前 ({beforeInterviewGoals.length})
+              <TabsTrigger value="scheduled">
+                面談予定 ({scheduledInterviewGoals.length})
               </TabsTrigger>
-              <TabsTrigger value="after_interview">
-                面談済み ({afterInterviewGoals.length})
+              <TabsTrigger value="completed">
+                面談済み ({completedInterviewGoals.length})
               </TabsTrigger>
               <TabsTrigger value="all">
                 すべて ({data.goals.length})
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="active" className="mt-6">
-              <GoalsTable goals={activeGoals} />
+            <TabsContent value="pending" className="mt-6">
+              <GoalsTable goals={pendingInterviewGoals} />
             </TabsContent>
 
-            <TabsContent value="before_interview" className="mt-6">
-              <GoalsTable goals={beforeInterviewGoals} />
+            <TabsContent value="scheduled" className="mt-6">
+              <GoalsTable goals={scheduledInterviewGoals} />
             </TabsContent>
 
-            <TabsContent value="after_interview" className="mt-6">
-              <GoalsTable goals={afterInterviewGoals} />
+            <TabsContent value="completed" className="mt-6">
+              <GoalsTable goals={completedInterviewGoals} />
             </TabsContent>
 
             <TabsContent value="all" className="mt-6">
@@ -180,8 +183,9 @@ function GoalsTable({ goals }: { goals: any[] }) {
               <TableHead className="text-black">スタッフ</TableHead>
               <TableHead className="text-black">目標</TableHead>
               <TableHead className="text-black">作成日</TableHead>
-              <TableHead className="text-black">期間</TableHead>
-              <TableHead className="text-black">ステータス</TableHead>
+              <TableHead className="text-black">期限</TableHead>
+              <TableHead className="text-black">面談ステータス</TableHead>
+              <TableHead className="text-black">進捗</TableHead>
               <TableHead className="text-black">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -192,20 +196,8 @@ function GoalsTable({ goals }: { goals: any[] }) {
                   {goal.staff?.full_name}
                 </TableCell>
                 <TableCell className="text-black">
-                  <div className="space-y-2">
-                    {goal.achievement_title && (
-                      <div>
-                        <Badge className="bg-[#05a7be] text-white text-xs mr-2">成果</Badge>
-                        <span className="font-bold">{goal.achievement_title}</span>
-                      </div>
-                    )}
-                    {goal.behavior_title && (
-                      <div>
-                        <Badge className="bg-[#18c4b8] text-white text-xs mr-2">行動</Badge>
-                        <span className="font-bold">{goal.behavior_title}</span>
-                      </div>
-                    )}
-                  </div>
+                  <div className="font-bold">{goal.goal_title}</div>
+                  <div className="text-sm text-gray-600 mt-1 line-clamp-2">{goal.goal_description}</div>
                 </TableCell>
                 <TableCell>
                   <div className="text-sm text-gray-600">
@@ -213,12 +205,20 @@ function GoalsTable({ goals }: { goals: any[] }) {
                   </div>
                 </TableCell>
                 <TableCell className="text-black">
-                  {goal.period_year}年 Q{goal.period_quarter}
+                  {formatDate(goal.target_date)}
                 </TableCell>
                 <TableCell>
-                  <Badge className={getStatusBadge(goal.status || 'draft').className}>
-                    {getStatusBadge(goal.status || 'draft').label}
+                  <Badge className={getInterviewStatusBadge(goal.interview_status || 'pending').className}>
+                    {getInterviewStatusBadge(goal.interview_status || 'pending').label}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getGoalStatusBadge(goal.status || 'active').className}>
+                      {getGoalStatusBadge(goal.status || 'active').label}
+                    </Badge>
+                    <span className="text-sm text-gray-600">{goal.achievement_rate}%</span>
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Link href={`/admin/goals/${goal.id}`}>
@@ -244,33 +244,31 @@ function GoalsTable({ goals }: { goals: any[] }) {
             {/* ヘッダー: スタッフとステータス */}
             <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: '#e0f2f1' }}>
               <div className="font-bold text-base text-black">{goal.staff?.full_name}</div>
-              <Badge className={getStatusBadge(goal.status || 'draft').className}>
-                {getStatusBadge(goal.status || 'draft').label}
+              <Badge className={getInterviewStatusBadge(goal.interview_status || 'pending').className}>
+                {getInterviewStatusBadge(goal.interview_status || 'pending').label}
               </Badge>
             </div>
 
             {/* 目標 */}
-            <div className="space-y-2">
-              {goal.achievement_title && (
-                <div className="flex items-start gap-2">
-                  <Badge className="bg-[#05a7be] text-white text-xs mt-0.5">成果</Badge>
-                  <span className="font-bold text-sm text-black flex-1">{goal.achievement_title}</span>
-                </div>
-              )}
-              {goal.behavior_title && (
-                <div className="flex items-start gap-2">
-                  <Badge className="bg-[#18c4b8] text-white text-xs mt-0.5">行動</Badge>
-                  <span className="font-bold text-sm text-black flex-1">{goal.behavior_title}</span>
-                </div>
-              )}
+            <div>
+              <div className="font-bold text-sm text-black">{goal.goal_title}</div>
+              <div className="text-xs text-gray-600 mt-1 line-clamp-3">{goal.goal_description}</div>
             </div>
 
-            {/* 期間と作成日 */}
+            {/* ステータスと達成率 */}
+            <div className="flex items-center gap-2">
+              <Badge className={getGoalStatusBadge(goal.status || 'active').className}>
+                {getGoalStatusBadge(goal.status || 'active').label}
+              </Badge>
+              <span className="text-sm font-medium text-black">{goal.achievement_rate}%達成</span>
+            </div>
+
+            {/* 期限と作成日 */}
             <div className="grid grid-cols-2 gap-2 pt-2 border-t" style={{ borderColor: '#e0f2f1' }}>
               <div>
-                <div className="text-xs text-gray-600">期間</div>
+                <div className="text-xs text-gray-600">期限</div>
                 <div className="text-sm font-medium text-black">
-                  {goal.period_year}年 Q{goal.period_quarter}
+                  {formatDate(goal.target_date)}
                 </div>
               </div>
               <div>
