@@ -15,6 +15,7 @@ export type Database = {
           company_code: string
           company_name: string
           is_active: boolean
+          establishment_date: string | null
           settings: Json | null
           created_at: string
           updated_at: string
@@ -24,6 +25,7 @@ export type Database = {
           company_code: string
           company_name: string
           is_active?: boolean
+          establishment_date?: string | null
           settings?: Json | null
           created_at?: string
           updated_at?: string
@@ -33,6 +35,7 @@ export type Database = {
           company_code?: string
           company_name?: string
           is_active?: boolean
+          establishment_date?: string | null
           settings?: Json | null
           created_at?: string
           updated_at?: string

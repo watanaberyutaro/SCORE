@@ -117,11 +117,39 @@ async function getStaffAnnualEvaluationDetail(staffId: string, cycleId: string, 
     ? growthScores.reduce((sum, s) => sum + s, 0) / growthScores.length
     : null
 
+  // 四半期ごとにグループ化
+  const quarters = [
+    { number: 1, name: '第1四半期', months: monthlyEvaluations.slice(0, 3) },
+    { number: 2, name: '第2四半期', months: monthlyEvaluations.slice(3, 6) },
+    { number: 3, name: '第3四半期', months: monthlyEvaluations.slice(6, 9) },
+    { number: 4, name: '第4四半期', months: monthlyEvaluations.slice(9, 12) },
+  ]
+
+  const quarterlyData = quarters.map(quarter => {
+    const completed = quarter.months.filter(m => m.hasEvaluation).length
+    const scores = quarter.months
+      .filter(m => m.totalScore !== null)
+      .map(m => m.totalScore!)
+
+    const average = scores.length > 0
+      ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+      : null
+
+    return {
+      ...quarter,
+      completedCount: completed,
+      totalCount: quarter.months.length,
+      averageScore: average,
+      completionRate: Math.round((completed / quarter.months.length) * 100)
+    }
+  })
+
   return {
     staff,
     cycle,
     months,
     monthlyEvaluations,
+    quarterlyData,
     completedMonths,
     totalMonths: months.length,
     averageScore,
@@ -298,6 +326,78 @@ export default async function StaffAnnualEvaluationDetailPage({
                   : '-'}
               </p>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 四半期ごとの中間発表 */}
+      <Card className="mb-6 border-2" style={{ borderColor: '#05a7be' }}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-black">
+            <TrendingUp className="h-5 w-5" />
+            四半期ごとの中間発表
+          </CardTitle>
+          <CardDescription className="text-black">
+            3ヶ月ごとの評価サマリー
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {data.quarterlyData.map((quarter) => (
+              <div
+                key={quarter.number}
+                className="border-2 rounded-lg p-4 transition-all hover:shadow-md"
+                style={{
+                  borderColor: quarter.completedCount === quarter.totalCount ? '#10b981' : '#d1d5db',
+                  backgroundColor: quarter.completedCount === quarter.totalCount ? 'rgba(16, 185, 129, 0.05)' : 'transparent'
+                }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-lg text-black">{quarter.name}</h3>
+                  <Badge
+                    className={
+                      quarter.completedCount === quarter.totalCount
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }
+                  >
+                    {quarter.completedCount}/{quarter.totalCount}
+                  </Badge>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">完了率</span>
+                    <span className="font-semibold text-black">{quarter.completionRate}%</span>
+                  </div>
+
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="h-2 rounded-full transition-all"
+                      style={{
+                        width: `${quarter.completionRate}%`,
+                        backgroundColor: quarter.completionRate === 100 ? '#10b981' : '#6b7280'
+                      }}
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t border-gray-200">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">平均スコア</span>
+                      <span className="text-xl font-bold text-blue-600">
+                        {quarter.averageScore !== null
+                          ? quarter.averageScore.toFixed(2)
+                          : '-'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-gray-500 mt-2">
+                    {quarter.months.map(m => m.label.split('年')[1]).join(', ')}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

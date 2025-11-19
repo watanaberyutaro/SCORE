@@ -9,8 +9,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Calendar, Settings, Plus, Edit, Trash2, X } from 'lucide-react'
+import { Calendar, Settings, Plus, Edit, Trash2, X, Building2 } from 'lucide-react'
 import { EvaluationItemMaster, EvaluationCycle } from '@/types'
+import { calculatePeriod, getAllPeriods, getPeriodInfo } from '@/lib/utils/period-calculator'
 
 type NewCycle = Omit<EvaluationCycle, 'id' | 'created_at'>
 type NewItem = Omit<EvaluationItemMaster, 'id' | 'created_at'>
@@ -21,6 +22,14 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState<'cycles' | 'items'>('cycles')
+
+  // Company info state
+  const [companyId, setCompanyId] = useState<string>('')
+  const [companyName, setCompanyName] = useState<string>('')
+  const [establishmentDate, setEstablishmentDate] = useState<string>('')
+  const [currentPeriodInfo, setCurrentPeriodInfo] = useState<any>(null)
+  const [availablePeriods, setAvailablePeriods] = useState<any[]>([])
+  const [selectedPeriod, setSelectedPeriod] = useState<number>(1)
 
   // Cycle form state
   const [showCycleForm, setShowCycleForm] = useState(false)
@@ -68,7 +77,12 @@ export default function AdminSettingsPage() {
 
       if (!currentUser) throw new Error('ユーザー情報が見つかりません')
 
-      const [cyclesRes, itemsRes] = await Promise.all([
+      const [companyRes, cyclesRes, itemsRes] = await Promise.all([
+        supabase
+          .from('companies')
+          .select('*')
+          .eq('id', currentUser.company_id)
+          .single(),
         supabase
           .from('evaluation_cycles')
           .select('*')
@@ -80,8 +94,24 @@ export default function AdminSettingsPage() {
           .order('category')
       ])
 
+      if (companyRes.error) throw companyRes.error
       if (cyclesRes.error) throw cyclesRes.error
       if (itemsRes.error) throw itemsRes.error
+
+      // Set company info
+      setCompanyId(companyRes.data.id)
+      setCompanyName(companyRes.data.company_name)
+      setEstablishmentDate(companyRes.data.establishment_date || '')
+
+      // Calculate period info if establishment date exists
+      if (companyRes.data.establishment_date) {
+        const currentPeriod = calculatePeriod(companyRes.data.establishment_date)
+        setCurrentPeriodInfo(currentPeriod)
+
+        const periods = getAllPeriods(companyRes.data.establishment_date)
+        setAvailablePeriods(periods)
+        setSelectedPeriod(currentPeriod.periodNumber)
+      }
 
       setCycles(cyclesRes.data || [])
       setItems(itemsRes.data || [])
@@ -90,6 +120,87 @@ export default function AdminSettingsPage() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Company info operations
+  async function handleSaveEstablishmentDate() {
+    try {
+      setError('')
+
+      if (!establishmentDate) {
+        throw new Error('設立年月を入力してください')
+      }
+
+      const { error } = await supabase
+        .from('companies')
+        .update({ establishment_date: establishmentDate })
+        .eq('id', companyId)
+
+      if (error) throw error
+
+      // Recalculate period info
+      const currentPeriod = calculatePeriod(establishmentDate)
+      setCurrentPeriodInfo(currentPeriod)
+
+      const periods = getAllPeriods(establishmentDate)
+      setAvailablePeriods(periods)
+      setSelectedPeriod(currentPeriod.periodNumber)
+
+      alert('設立年月を保存しました')
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  async function handleGeneratePeriodCycle() {
+    try {
+      setError('')
+
+      if (!establishmentDate) {
+        throw new Error('設立年月を先に設定してください')
+      }
+
+      const periodInfo = getPeriodInfo(establishmentDate, selectedPeriod)
+
+      // Check if cycle already exists
+      const existingCycle = cycles.find(
+        c => c.start_date === periodInfo.startDate.toISOString().split('T')[0]
+      )
+
+      if (existingCycle) {
+        if (!confirm('この期のサイクルは既に存在します。上書きしますか？')) {
+          return
+        }
+        await supabase
+          .from('evaluation_cycles')
+          .delete()
+          .eq('id', existingCycle.id)
+      }
+
+      // Create new cycle
+      const newCycle = {
+        company_id: companyId,
+        cycle_name: `${periodInfo.periodName}（${periodInfo.startDate.getFullYear()}年${periodInfo.startDate.getMonth() + 1}月〜${periodInfo.endDate.getFullYear()}年${periodInfo.endDate.getMonth() + 1}月）`,
+        start_date: periodInfo.startDate.toISOString().split('T')[0],
+        end_date: periodInfo.endDate.toISOString().split('T')[0],
+        status: selectedPeriod === currentPeriodInfo?.periodNumber ? 'active' :
+               selectedPeriod < currentPeriodInfo?.periodNumber ? 'completed' : 'planning',
+        trial_date: null,
+        implementation_date: null,
+        final_date: null,
+      }
+
+      const { error } = await supabase
+        .from('evaluation_cycles')
+        .insert([newCycle])
+
+      if (error) throw error
+
+      await fetchData()
+      alert(`${periodInfo.periodName}のサイクルを作成しました`)
+    } catch (err: any) {
+      setError(err.message)
     }
   }
 
@@ -295,22 +406,116 @@ export default function AdminSettingsPage() {
 
       {/* Cycles Tab */}
       {activeTab === 'cycles' && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center text-lg lg:text-xl">
-                  <Calendar className="mr-2 h-5 w-5" />
-                  評価サイクル
-                </CardTitle>
-                <CardDescription>評価期間の管理</CardDescription>
+        <>
+          {/* Company Info Card */}
+          <Card className="mb-6 border-2" style={{ borderColor: '#05a7be' }}>
+            <CardHeader>
+              <CardTitle className="flex items-center text-lg lg:text-xl text-black">
+                <Building2 className="mr-2 h-5 w-5" />
+                会社情報
+              </CardTitle>
+              <CardDescription className="text-black">
+                設立年月から自動で評価期を計算します
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="company_name" className="text-black">会社名</Label>
+                  <Input
+                    id="company_name"
+                    value={companyName}
+                    disabled
+                    className="bg-gray-100"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="establishment_date" className="text-black">設立年月 *</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="establishment_date"
+                      type="date"
+                      value={establishmentDate}
+                      onChange={(e) => setEstablishmentDate(e.target.value)}
+                      className="border-2"
+                      style={{ borderColor: '#05a7be' }}
+                    />
+                    <Button onClick={handleSaveEstablishmentDate} className="bg-[#05a7be] hover:bg-[#048a9d]">
+                      保存
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <Button onClick={() => setShowCycleForm(true)} size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                新規作成
-              </Button>
-            </div>
-          </CardHeader>
+
+              {currentPeriodInfo && (
+                <div className="p-4 rounded-lg" style={{ backgroundColor: 'rgba(5, 167, 190, 0.1)' }}>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">現在の期</p>
+                      <p className="text-xl font-bold text-black">{currentPeriodInfo.periodName}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">期の期間</p>
+                      <p className="text-sm font-semibold text-black">
+                        {currentPeriodInfo.startDate.toLocaleDateString('ja-JP')} 〜 {currentPeriodInfo.endDate.toLocaleDateString('ja-JP')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">現在の四半期</p>
+                      <p className="text-sm font-semibold text-black">{currentPeriodInfo.quarterName}（{currentPeriodInfo.currentMonth}/12ヶ月）</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {availablePeriods.length > 0 && (
+                <div className="space-y-3">
+                  <Label className="text-black">期からサイクルを自動生成</Label>
+                  <div className="flex gap-2">
+                    <select
+                      value={selectedPeriod}
+                      onChange={(e) => setSelectedPeriod(Number(e.target.value))}
+                      className="flex-1 rounded-md border-2 px-4 py-2 text-black"
+                      style={{ borderColor: '#05a7be' }}
+                    >
+                      {availablePeriods.map((period) => (
+                        <option key={period.periodNumber} value={period.periodNumber}>
+                          {period.periodName}（{period.startDate.toLocaleDateString('ja-JP')} 〜 {period.endDate.toLocaleDateString('ja-JP')}）
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      onClick={handleGeneratePeriodCycle}
+                      className="bg-[#6366f1] hover:bg-[#4f46e5]"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      生成
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    ※ 選択した期の開始日・終了日で自動的にサイクルが作成されます
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center text-lg lg:text-xl">
+                    <Calendar className="mr-2 h-5 w-5" />
+                    評価サイクル
+                  </CardTitle>
+                  <CardDescription>評価期間の管理（手動作成）</CardDescription>
+                </div>
+                <Button onClick={() => setShowCycleForm(true)} size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  新規作成
+                </Button>
+              </div>
+            </CardHeader>
           <CardContent>
             {showCycleForm && (
               <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
@@ -442,6 +647,7 @@ export default function AdminSettingsPage() {
             </div>
           </CardContent>
         </Card>
+        </>
       )}
 
       {/* Items Tab */}
