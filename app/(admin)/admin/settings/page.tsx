@@ -13,7 +13,7 @@ import { Calendar, Settings, Plus, Edit, Trash2, X, Building2, Copy, Check } fro
 import { EvaluationItemMaster, EvaluationCycle, EvaluationCategoryMaster } from '@/types'
 import { calculatePeriod, getAllPeriods, getPeriodInfo } from '@/lib/utils/period-calculator'
 
-type NewCycle = Omit<EvaluationCycle, 'id' | 'created_at'>
+type NewCycle = Omit<EvaluationCycle, 'id' | 'created_at' | 'company_id'>
 type NewItem = Omit<EvaluationItemMaster, 'id' | 'created_at'>
 type NewCategory = Omit<EvaluationCategoryMaster, 'id' | 'created_at' | 'updated_at'>
 
