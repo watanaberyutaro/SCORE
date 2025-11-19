@@ -49,6 +49,17 @@ async function getDashboardData() {
 
   console.log('完了:', completedUsers.length, '未完了:', pendingUsers.length)
 
+  // 目標管理のデータを取得
+  const { data: allGoals } = await supabase
+    .from('staff_goals')
+    .select('*')
+
+  // 面談前の目標（interview_status が pending または scheduled）
+  const pendingInterviews = (allGoals || []).filter(g => g.interview_status === 'pending' || g.interview_status === 'scheduled')
+
+  // 面談済みの目標（interview_status が completed）
+  const completedInterviews = (allGoals || []).filter(g => g.interview_status === 'completed')
+
   return {
     totalStaff: totalStaff || 0,
     currentYear,
@@ -57,6 +68,10 @@ async function getDashboardData() {
     pendingEvaluations: pendingUsers.length,
     completedUsers,
     pendingUsers,
+    // 目標管理関連
+    pendingInterviews: pendingInterviews.length,
+    completedInterviews: completedInterviews.length,
+    totalGoals: (allGoals || []).length,
   }
 }
 

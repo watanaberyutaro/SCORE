@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Users, ClipboardCheck, TrendingUp, XCircle, Award, Target, AlertTriangle, BarChart3, Star, Trophy, TrendingDown } from 'lucide-react'
+import { Users, ClipboardCheck, TrendingUp, XCircle, Award, Target, AlertTriangle, BarChart3, Star, Trophy, TrendingDown, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -18,6 +18,9 @@ interface DashboardClientProps {
     pendingEvaluations: number
     completedUsers: any[]
     pendingUsers: any[]
+    pendingInterviews: number
+    completedInterviews: number
+    totalGoals: number
   }
 }
 
@@ -85,6 +88,33 @@ export function DashboardClient({ data }: DashboardClientProps) {
     },
   ]
 
+  const goalsStats = [
+    {
+      title: '面談前の目標',
+      value: data.pendingInterviews,
+      icon: Target,
+      description: 'レビュー待ちの目標',
+      color: '#f59e0b',
+      bgColor: 'rgba(245, 158, 11, 0.1)',
+    },
+    {
+      title: '面談済みの目標',
+      value: data.completedInterviews,
+      icon: CheckCircle,
+      description: '面談完了した目標',
+      color: '#10b981',
+      bgColor: 'rgba(16, 185, 129, 0.1)',
+    },
+    {
+      title: '目標総数',
+      value: data.totalGoals,
+      icon: Award,
+      description: '全ての目標',
+      color: '#6366f1',
+      bgColor: 'rgba(99, 102, 241, 0.1)',
+    },
+  ]
+
   return (
     <>
       {/* 統計カード */}
@@ -109,6 +139,27 @@ export function DashboardClient({ data }: DashboardClientProps) {
                     />
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      {/* 目標管理統計カード */}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mb-8">
+        {goalsStats.map((stat) => {
+          const Icon = stat.icon
+          return (
+            <Card key={stat.title} className="border-2 transition-shadow hover:shadow-lg" style={{ borderColor: stat.color }}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-black">{stat.title}</CardTitle>
+                <div className="p-2 rounded-lg" style={{ backgroundColor: stat.bgColor }}>
+                  <Icon className="h-5 w-5" style={{ color: stat.color }} />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-black">{stat.value}</div>
+                <p className="text-xs text-black mt-1">{stat.description}</p>
               </CardContent>
             </Card>
           )

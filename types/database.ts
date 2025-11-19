@@ -219,6 +219,10 @@ export type Database = {
           target_date: string
           achievement_rate: number
           status: 'active' | 'completed' | 'abandoned'
+          interview_status: 'pending' | 'scheduled' | 'completed'
+          reviewed_by: string | null
+          interviewed_at: string | null
+          admin_comments: string | null
           created_at: string
           updated_at: string
         }
@@ -230,6 +234,10 @@ export type Database = {
           target_date: string
           achievement_rate?: number
           status?: 'active' | 'completed' | 'abandoned'
+          interview_status?: 'pending' | 'scheduled' | 'completed'
+          reviewed_by?: string | null
+          interviewed_at?: string | null
+          admin_comments?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -241,6 +249,10 @@ export type Database = {
           target_date?: string
           achievement_rate?: number
           status?: 'active' | 'completed' | 'abandoned'
+          interview_status?: 'pending' | 'scheduled' | 'completed'
+          reviewed_by?: string | null
+          interviewed_at?: string | null
+          admin_comments?: string | null
           created_at?: string
           updated_at?: string
         }
