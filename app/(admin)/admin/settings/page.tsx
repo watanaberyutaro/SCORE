@@ -107,10 +107,12 @@ export default function AdminSettingsPage() {
         supabase
           .from('evaluation_items_master')
           .select('*')
+          .eq('company_id', currentUser.company_id)
           .order('category'),
         supabase
           .from('evaluation_categories')
           .select('*')
+          .eq('company_id', currentUser.company_id)
           .order('display_order')
       ])
 
@@ -319,7 +321,7 @@ export default function AdminSettingsPage() {
       } else {
         const { error } = await supabase
           .from('evaluation_items_master')
-          .insert([itemForm])
+          .insert([{ ...itemForm, company_id: companyId }])
 
         if (error) throw error
       }
@@ -397,11 +399,12 @@ export default function AdminSettingsPage() {
 
         if (error) throw error
       } else {
-        // Check if category_key already exists
+        // Check if category_key already exists in this company
         const { data: existing } = await supabase
           .from('evaluation_categories')
           .select('id')
           .eq('category_key', categoryForm.category_key)
+          .eq('company_id', companyId)
           .single()
 
         if (existing) {
@@ -410,7 +413,7 @@ export default function AdminSettingsPage() {
 
         const { error } = await supabase
           .from('evaluation_categories')
-          .insert([categoryForm])
+          .insert([{ ...categoryForm, company_id: companyId }])
 
         if (error) throw error
       }

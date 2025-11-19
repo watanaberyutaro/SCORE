@@ -292,6 +292,7 @@ export type Database = {
       evaluation_categories: {
         Row: {
           id: string
+          company_id: string
           category_key: string
           category_label: string
           description: string | null
@@ -303,6 +304,7 @@ export type Database = {
         }
         Insert: {
           id?: string
+          company_id: string
           category_key: string
           category_label: string
           description?: string | null
@@ -314,6 +316,7 @@ export type Database = {
         }
         Update: {
           id?: string
+          company_id?: string
           category_key?: string
           category_label?: string
           description?: string | null
@@ -327,6 +330,7 @@ export type Database = {
       evaluation_items_master: {
         Row: {
           id: string
+          company_id: string
           category: string
           item_name: string
           min_score: number
@@ -336,6 +340,7 @@ export type Database = {
         }
         Insert: {
           id?: string
+          company_id: string
           category: string
           item_name: string
           min_score: number
@@ -345,6 +350,7 @@ export type Database = {
         }
         Update: {
           id?: string
+          company_id?: string
           category?: string
           item_name?: string
           min_score?: number

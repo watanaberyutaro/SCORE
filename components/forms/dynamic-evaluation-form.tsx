@@ -54,16 +54,29 @@ export function DynamicEvaluationForm({
     try {
       setLoading(true)
 
-      // Fetch categories and items
+      // Get staff's company_id first
+      const { data: staffData } = await supabase
+        .from('users')
+        .select('company_id')
+        .eq('id', staffId)
+        .single()
+
+      if (!staffData) {
+        throw new Error('スタッフ情報が見つかりません')
+      }
+
+      // Fetch categories and items filtered by company_id
       const [categoriesRes, itemsRes] = await Promise.all([
         supabase
           .from('evaluation_categories')
           .select('*')
+          .eq('company_id', staffData.company_id)
           .eq('is_active', true)
           .order('display_order'),
         supabase
           .from('evaluation_items_master')
           .select('*')
+          .eq('company_id', staffData.company_id)
       ])
 
       if (categoriesRes.error) throw categoriesRes.error
