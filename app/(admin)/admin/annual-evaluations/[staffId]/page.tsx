@@ -34,24 +34,28 @@ async function getStaffAnnualEvaluationDetail(staffId: string, cycleId: string, 
     return null
   }
 
-  // サイクル期間内の月を生成
+  // サイクル期間内の月を生成（12ヶ月固定）
   const startDate = new Date(cycle.start_date)
-  const endDate = new Date(cycle.end_date)
-
   const months: { year: number; month: number; label: string }[] = []
-  const currentDate = new Date(startDate)
-  // 日付を1日に固定して月末の日付による問題を回避
-  currentDate.setDate(1)
 
-  while (currentDate <= endDate) {
+  // 開始年月を取得
+  let currentYear = startDate.getFullYear()
+  let currentMonth = startDate.getMonth() // 0-11
+
+  // 12ヶ月分の月を生成
+  for (let i = 0; i < 12; i++) {
     months.push({
-      year: currentDate.getFullYear(),
-      month: currentDate.getMonth() + 1,
-      label: `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月`
+      year: currentYear,
+      month: currentMonth + 1, // 1-12
+      label: `${currentYear}年${currentMonth + 1}月`
     })
-    // 次の月の1日に設定
-    currentDate.setMonth(currentDate.getMonth() + 1)
-    currentDate.setDate(1)
+
+    // 次の月へ
+    currentMonth++
+    if (currentMonth > 11) {
+      currentMonth = 0
+      currentYear++
+    }
   }
 
   // 各月の評価を取得
