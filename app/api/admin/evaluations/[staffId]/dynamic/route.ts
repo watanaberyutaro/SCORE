@@ -92,13 +92,14 @@ export async function POST(
       evaluationId = newEvaluation.id
     }
 
-    // 評価項目マスターから全項目を取得
+    // 評価項目マスターから企業の項目を取得
     const { data: itemsMaster } = await supabase
       .from('evaluation_items_master')
       .select('*')
+      .eq('company_id', staffData.company_id)
 
-    if (!itemsMaster) {
-      return NextResponse.json({ error: 'No evaluation items found' }, { status: 400 })
+    if (!itemsMaster || itemsMaster.length === 0) {
+      return NextResponse.json({ error: 'No evaluation items found for this company' }, { status: 400 })
     }
 
     // 既存の評価回答を削除（管理者の分のみ）
