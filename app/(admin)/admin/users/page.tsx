@@ -7,8 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Users, UserCog, Search, Mail, Calendar, Building } from 'lucide-react'
+import { Users, UserCog, Search, Mail, Calendar, Eye } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 interface User {
   id: string
@@ -46,6 +47,7 @@ export default function UsersManagementPage() {
     byDepartment: {}
   })
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => {
     fetchUsers()
@@ -121,9 +123,7 @@ export default function UsersManagementPage() {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(u =>
         u.full_name.toLowerCase().includes(query) ||
-        u.email.toLowerCase().includes(query) ||
-        (u.department && u.department.toLowerCase().includes(query)) ||
-        (u.position && u.position.toLowerCase().includes(query))
+        u.email.toLowerCase().includes(query)
       )
     }
 
@@ -209,7 +209,7 @@ export default function UsersManagementPage() {
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
-            placeholder="名前、メール、部署、役職で検索..."
+            placeholder="名前、メールで検索..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -236,64 +236,33 @@ export default function UsersManagementPage() {
         ) : (
           filteredUsers.map((user) => (
             <Card key={user.id} className="hover:shadow-md transition-shadow">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1 flex-1">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2 flex-1">
                     <div className="flex items-center gap-2">
-                      <CardTitle className="text-lg">{user.full_name}</CardTitle>
+                      <h3 className="text-lg font-semibold">{user.full_name}</h3>
                       {user.is_admin ? (
                         <Badge className="bg-blue-100 text-blue-800">管理者</Badge>
                       ) : (
                         <Badge className="bg-gray-100 text-gray-800">スタッフ</Badge>
                       )}
                     </div>
-                    <CardDescription className="flex items-center gap-2">
-                      <Mail className="h-3 w-3" />
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <Mail className="h-4 w-4" />
                       {user.email}
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                  {user.department && (
-                    <div className="flex items-center gap-2">
-                      <Building className="h-4 w-4 text-gray-400" />
-                      <div>
-                        <p className="text-gray-500">部署</p>
-                        <p className="font-medium">{user.department}</p>
-                      </div>
                     </div>
-                  )}
-                  {user.position && (
-                    <div className="flex items-center gap-2">
-                      <UserCog className="h-4 w-4 text-gray-400" />
-                      <div>
-                        <p className="text-gray-500">役職</p>
-                        <p className="font-medium">{user.position}</p>
-                      </div>
-                    </div>
-                  )}
-                  {user.hire_date && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-gray-400" />
-                      <div>
-                        <p className="text-gray-500">入社日</p>
-                        <p className="font-medium">
-                          {new Date(user.hire_date).toLocaleDateString('ja-JP')}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <div>
-                      <p className="text-gray-500">登録日</p>
-                      <p className="font-medium">
-                        {new Date(user.created_at).toLocaleDateString('ja-JP')}
-                      </p>
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <Calendar className="h-4 w-4" />
+                      登録日: {new Date(user.created_at).toLocaleDateString('ja-JP')}
                     </div>
                   </div>
+                  <Button
+                    onClick={() => router.push(`/admin/evaluations?staff_id=${user.id}`)}
+                    className="ml-4"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    評価一覧
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -301,24 +270,6 @@ export default function UsersManagementPage() {
         )}
       </div>
 
-      {/* Department Stats */}
-      {Object.keys(stats.byDepartment).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>部署別ユーザー数</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {Object.entries(stats.byDepartment).map(([dept, count]) => (
-                <div key={dept} className="text-center p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-500">{dept}</p>
-                  <p className="text-2xl font-bold">{count}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

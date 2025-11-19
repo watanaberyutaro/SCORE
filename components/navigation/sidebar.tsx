@@ -20,7 +20,12 @@ import {
   Users
 } from 'lucide-react'
 
-export function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean
+  onClose?: () => void
+}
+
+export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { user, signOut, isAdmin } = useAuth()
 
@@ -50,14 +55,39 @@ export function Sidebar() {
 
   if (!user) return null
 
+  const handleLinkClick = () => {
+    if (onClose) onClose()
+  }
+
   return (
-    <div className="flex h-screen w-64 flex-col" style={{ backgroundColor: '#333', color: '#fff' }}>
-      {/* ロゴ */}
-      <div className="flex h-16 items-center justify-center border-b border-gray-600 px-6">
-        <Link href={isAdmin ? '/admin/dashboard' : '/dashboard'} className="text-xl font-bold" style={{ color: '#fff' }}>
-          SHARESCORE
-        </Link>
-      </div>
+    <>
+      {/* モバイル用オーバーレイ */}
+      {isOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={onClose}
+        />
+      )}
+
+      {/* サイドバー */}
+      <div
+        className={cn(
+          "flex h-screen w-64 flex-col fixed lg:static inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out",
+          !isOpen && "lg:translate-x-0 -translate-x-full"
+        )}
+        style={{ backgroundColor: '#333', color: '#fff' }}
+      >
+        {/* ロゴ */}
+        <div className="flex h-16 items-center justify-center border-b border-gray-600 px-6">
+          <Link
+            href={isAdmin ? '/admin/dashboard' : '/dashboard'}
+            className="text-xl font-bold"
+            style={{ color: '#fff' }}
+            onClick={handleLinkClick}
+          >
+            SHARESCORE
+          </Link>
+        </div>
 
       {/* ナビゲーション */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -70,9 +100,10 @@ export function Sidebar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors'
+                  'flex items-center gap-3 rounded-lg px-3 py-3 lg:py-2 text-base lg:text-sm font-medium transition-colors'
                 )}
                 style={isActive ? { backgroundColor: '#555', color: '#fff' } : { color: '#fff' }}
+                onClick={handleLinkClick}
                 onMouseEnter={(e) => {
                   if (!isActive) {
                     e.currentTarget.style.backgroundColor = '#555'
@@ -84,7 +115,7 @@ export function Sidebar() {
                   }
                 }}
               >
-                <Icon className="h-5 w-5" />
+                <Icon className="h-6 w-6 lg:h-5 lg:w-5" />
                 {item.label}
               </Link>
             )
@@ -109,7 +140,7 @@ export function Sidebar() {
           variant="ghost"
           size="sm"
           onClick={signOut}
-          className="w-full justify-start"
+          className="w-full justify-start text-base lg:text-sm py-3 lg:py-2"
           style={{ color: '#fff' }}
           onMouseEnter={(e) => {
             e.currentTarget.style.backgroundColor = '#555'
@@ -118,10 +149,11 @@ export function Sidebar() {
             e.currentTarget.style.backgroundColor = 'transparent'
           }}
         >
-          <LogOut className="mr-2 h-4 w-4" />
+          <LogOut className="mr-2 h-5 w-5 lg:h-4 lg:w-4" />
           ログアウト
         </Button>
       </div>
-    </div>
+      </div>
+    </>
   )
 }
