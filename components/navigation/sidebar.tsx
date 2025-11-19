@@ -53,7 +53,7 @@ export function Sidebar() {
   return (
     <div className="flex h-screen w-64 flex-col" style={{ backgroundColor: '#333', color: '#fff' }}>
       {/* ロゴ */}
-      <div className="flex h-16 items-center justify-center border-b px-6" style={{ borderColor: '#555' }}>
+      <div className="flex h-16 items-center justify-center border-b border-gray-600 px-6">
         <Link href={isAdmin ? '/admin/dashboard' : '/dashboard'} className="text-xl font-bold" style={{ color: '#fff' }}>
           SHARESCORE
         </Link>
@@ -93,7 +93,7 @@ export function Sidebar() {
       </nav>
 
       {/* ユーザー情報 */}
-      <div className="border-t p-4" style={{ borderColor: '#555' }}>
+      <div className="border-t border-gray-600 p-4">
         <div className="mb-3">
           <p className="text-sm font-medium truncate" style={{ color: '#fff' }}>{user.full_name}</p>
           {isAdmin && (
