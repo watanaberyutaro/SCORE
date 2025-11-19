@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Users, ClipboardCheck, TrendingUp, XCircle, Award, Target, AlertTriangle, BarChart3, Star, Trophy, TrendingDown, CheckCircle } from 'lucide-react'
+import { Users, ClipboardCheck, TrendingUp, XCircle, Award, Target, AlertTriangle, BarChart3, Star, Trophy, TrendingDown, CheckCircle, HelpCircle } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -21,6 +21,7 @@ interface DashboardClientProps {
     pendingInterviews: number
     completedInterviews: number
     totalGoals: number
+    unansweredQuestions: number
   }
 }
 
@@ -113,6 +114,14 @@ export function DashboardClient({ data }: DashboardClientProps) {
       color: '#6366f1',
       bgColor: 'rgba(99, 102, 241, 0.1)',
     },
+    {
+      title: '未回答の質問',
+      value: data.unansweredQuestions,
+      icon: HelpCircle,
+      description: '回答待ちの質問',
+      color: '#ef4444',
+      bgColor: 'rgba(239, 68, 68, 0.1)',
+    },
   ]
 
   return (
@@ -146,7 +155,7 @@ export function DashboardClient({ data }: DashboardClientProps) {
       </div>
 
       {/* 目標管理統計カード */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mb-8">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
         {goalsStats.map((stat) => {
           const Icon = stat.icon
           return (

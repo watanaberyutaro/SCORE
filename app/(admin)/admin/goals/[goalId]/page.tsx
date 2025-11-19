@@ -33,17 +33,13 @@ async function getGoalDetail(goalId: string) {
   return goal
 }
 
-function getStatusBadge(status: string) {
+function getGoalStatusBadge(status: string) {
   const statusConfig: Record<string, { label: string; className: string }> = {
-    draft: { label: '下書き', className: 'bg-gray-200 text-black border-2 border-gray-300' },
-    submitted: { label: '提出済み', className: 'bg-[#1ed7cd] text-black border-2 border-[#1ed7cd] font-bold' },
-    under_review: { label: '確認中', className: 'bg-[#18c4b8] text-black border-2 border-[#18c4b8] font-bold' },
-    approved: { label: '承認済み', className: 'bg-[#05a7be] text-black border-2 border-[#05a7be] font-bold' },
-    active: { label: '進行中', className: 'bg-[#087ea2] text-black border-2 border-[#087ea2] font-bold' },
-    completed: { label: '完了', className: 'bg-[#017598] text-white border-2 border-[#017598] font-bold' },
-    cancelled: { label: 'キャンセル', className: 'bg-gray-400 text-white border-2 border-gray-400' },
+    active: { label: '進行中', className: 'bg-[#087ea2] text-white border-2 border-[#087ea2]' },
+    completed: { label: '完了', className: 'bg-[#017598] text-white border-2 border-[#017598]' },
+    abandoned: { label: '中止', className: 'bg-gray-400 text-white border-2 border-gray-400' },
   }
-  return statusConfig[status] || statusConfig.draft
+  return statusConfig[status] || statusConfig.active
 }
 
 export default async function AdminGoalDetailPage({
@@ -102,16 +98,16 @@ export default async function AdminGoalDetailPage({
         </CardContent>
       </Card>
 
-      {/* ステータス変更 */}
+      {/* 面談ステータス変更 */}
       <Card className="mb-6 border-2" style={{ borderColor: '#18c4b8' }}>
         <CardHeader>
-          <CardTitle className="text-black">ステータス管理</CardTitle>
+          <CardTitle className="text-black">面談ステータス管理</CardTitle>
           <CardDescription className="text-black">
             目標の面談ステータスを変更できます
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <GoalStatusChanger goalId={goal.id} currentStatus={goal.status || 'before_interview'} />
+          <GoalStatusChanger goalId={goal.id} currentStatus={goal.interview_status || 'pending'} />
         </CardContent>
       </Card>
 
@@ -122,8 +118,8 @@ export default async function AdminGoalDetailPage({
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-3">
                 <CardTitle className="text-2xl text-black">目標セット</CardTitle>
-                <Badge className={getStatusBadge(goal.status || 'active').className}>
-                  {getStatusBadge(goal.status || 'active').label}
+                <Badge className={getGoalStatusBadge(goal.status || 'active').className}>
+                  {getGoalStatusBadge(goal.status || 'active').label}
                 </Badge>
               </div>
             </div>

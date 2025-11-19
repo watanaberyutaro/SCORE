@@ -11,15 +11,9 @@ interface GoalStatusChangerProps {
 }
 
 const statusOptions = [
-  { value: 'draft', label: '下書き', color: 'bg-gray-200 text-black border-2 border-gray-300' },
-  { value: 'submitted', label: '提出済み', color: 'bg-[#1ed7cd] text-black border-2 border-[#1ed7cd] font-bold' },
-  { value: 'under_review', label: '確認中', color: 'bg-[#18c4b8] text-black border-2 border-[#18c4b8] font-bold' },
-  { value: 'approved', label: '承認済み', color: 'bg-[#05a7be] text-black border-2 border-[#05a7be] font-bold' },
-  { value: 'active', label: '進行中', color: 'bg-[#087ea2] text-black border-2 border-[#087ea2] font-bold' },
-  { value: 'completed', label: '完了', color: 'bg-[#017598] text-white border-2 border-[#017598] font-bold' },
-  { value: 'cancelled', label: 'キャンセル', color: 'bg-gray-400 text-white border-2 border-gray-400' },
-  { value: 'before_interview', label: '面談前', color: 'bg-[#1ed7cd] text-black border-2 border-[#1ed7cd] font-bold' },
-  { value: 'after_interview', label: '面談済み', color: 'bg-[#05a7be] text-white border-2 border-[#05a7be] font-bold' },
+  { value: 'pending', label: '面談前', color: 'bg-yellow-100 text-yellow-800 border-2 border-yellow-300' },
+  { value: 'scheduled', label: '面談予定', color: 'bg-blue-100 text-blue-800 border-2 border-blue-300' },
+  { value: 'completed', label: '面談済み', color: 'bg-green-100 text-green-800 border-2 border-green-300' },
 ]
 
 export function GoalStatusChanger({ goalId, currentStatus }: GoalStatusChangerProps) {
@@ -37,7 +31,7 @@ export function GoalStatusChanger({ goalId, currentStatus }: GoalStatusChangerPr
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ interview_status: newStatus }),
       })
 
       if (!response.ok) {
@@ -46,8 +40,8 @@ export function GoalStatusChanger({ goalId, currentStatus }: GoalStatusChangerPr
 
       router.refresh()
     } catch (error) {
-      console.error('Error updating goal status:', error)
-      alert('ステータスの更新に失敗しました')
+      console.error('Error updating goal interview status:', error)
+      alert('面談ステータスの更新に失敗しました')
     } finally {
       setIsUpdating(false)
     }
@@ -56,14 +50,14 @@ export function GoalStatusChanger({ goalId, currentStatus }: GoalStatusChangerPr
   return (
     <div className="space-y-3">
       <div>
-        <h3 className="text-sm font-medium text-black mb-2">現在のステータス</h3>
+        <h3 className="text-sm font-medium text-black mb-2">現在の面談ステータス</h3>
         <Badge className={currentStatusConfig.color}>
           {currentStatusConfig.label}
         </Badge>
       </div>
 
       <div>
-        <h3 className="text-sm font-medium text-black mb-2">ステータスを変更</h3>
+        <h3 className="text-sm font-medium text-black mb-2">面談ステータスを変更</h3>
         <div className="flex flex-wrap gap-2">
           {statusOptions.map((option) => (
             <Button

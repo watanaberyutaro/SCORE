@@ -146,11 +146,155 @@ export function useAuth() {
     }
   }
 
+  // 企業コード生成（6桁の英数字）
+  function generateCompanyCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // 紛らわしい文字を除外
+    let code = ''
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return code
+  }
+
+  // 企業登録（管理者アカウント作成を含む）
+  async function registerCompany(companyName: string, adminName: string, adminEmail: string, password: string, establishmentDate?: string) {
+    try {
+      // 1. 一意な企業コードを生成
+      let companyCode = generateCompanyCode()
+      let isUnique = false
+      let attempts = 0
+
+      while (!isUnique && attempts < 10) {
+        const { data } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('company_code', companyCode)
+          .single()
+
+        if (!data) {
+          isUnique = true
+        } else {
+          companyCode = generateCompanyCode()
+          attempts++
+        }
+      }
+
+      if (!isUnique) {
+        throw new Error('企業コードの生成に失敗しました。もう一度お試しください。')
+      }
+
+      // 2. 管理者ユーザーを作成
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: adminEmail,
+        password,
+      })
+
+      if (authError) throw authError
+      if (!authData.user) throw new Error('ユーザー作成に失敗しました')
+
+      // 3. 企業を作成
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .insert({
+          company_code: companyCode,
+          company_name: companyName,
+          is_active: true,
+          establishment_date: establishmentDate || null,
+        })
+        .select()
+        .single()
+
+      if (companyError) {
+        // ロールバック: 作成したユーザーを削除
+        await supabase.auth.admin.deleteUser(authData.user.id)
+        throw companyError
+      }
+
+      // 4. usersテーブルにレコードを作成（管理者として）
+      const { error: userError } = await supabase
+        .from('users')
+        .insert({
+          id: authData.user.id,
+          email: adminEmail,
+          full_name: adminName,
+          company_id: companyData.id,
+          role: 'admin',
+          is_admin: true,
+        })
+
+      if (userError) {
+        // ロールバック: 企業を削除
+        await supabase.from('companies').delete().eq('id', companyData.id)
+        await supabase.auth.admin.deleteUser(authData.user.id)
+        throw userError
+      }
+
+      return { success: true, companyCode }
+    } catch (error: any) {
+      console.error('企業登録エラー:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // ユーザー登録（既存企業への参加）
+  async function registerUser(companyCode: string, fullName: string, email: string, password: string) {
+    try {
+      // 1. 企業コードの検証
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select('id, company_code, company_name, is_active')
+        .eq('company_code', companyCode)
+        .single()
+
+      if (companyError || !companyData) {
+        throw new Error('企業コードが正しくありません')
+      }
+
+      if (!companyData.is_active) {
+        throw new Error('この企業アカウントは無効化されています')
+      }
+
+      // 2. ユーザーを作成
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      })
+
+      if (authError) throw authError
+      if (!authData.user) throw new Error('ユーザー作成に失敗しました')
+
+      // 3. usersテーブルにレコードを作成（スタッフとして）
+      const { error: userError } = await supabase
+        .from('users')
+        .insert({
+          id: authData.user.id,
+          email,
+          full_name: fullName,
+          company_id: companyData.id,
+          role: 'staff',
+          is_admin: false,
+        })
+
+      if (userError) {
+        // ロールバック: 作成したユーザーを削除
+        await supabase.auth.admin.deleteUser(authData.user.id)
+        throw userError
+      }
+
+      return { success: true, companyName: companyData.company_name }
+    } catch (error: any) {
+      console.error('ユーザー登録エラー:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
   return {
     user,
     loading,
     signIn,
     signOut,
+    registerCompany,
+    registerUser,
     isAdmin: user?.is_admin === true,
   }
 }

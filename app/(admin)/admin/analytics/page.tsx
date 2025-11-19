@@ -9,6 +9,26 @@ import type { EvaluationRank } from '@/types'
 async function getAnalyticsData() {
   const supabase = await createSupabaseServerClient()
 
+  // 現在のユーザーを取得
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error('Unauthorized')
+  }
+
+  // 現在のユーザーのcompany_idを取得
+  const { data: currentUser } = await supabase
+    .from('users')
+    .select('company_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!currentUser) {
+    throw new Error('User not found')
+  }
+
   // 現在の期を計算（7月始まり）
   const now = new Date()
   const currentYear = now.getFullYear()
@@ -17,13 +37,13 @@ async function getAnalyticsData() {
   const fiscalYearStart = currentMonth >= 7 ? currentYear : currentYear - 1
   const fiscalYearEnd = fiscalYearStart + 1
 
-  // 現在の期の全評価を取得
+  // 現在の期の全評価を取得（同じ企業のみ）
   const { data: evaluations } = await supabase
     .from('evaluations')
     .select(
       `
       *,
-      staff:users!evaluations_staff_id_fkey(full_name, department, position)
+      staff:users!evaluations_staff_id_fkey(full_name, department, position, company_id)
     `
     )
     .or(
@@ -33,6 +53,9 @@ async function getAnalyticsData() {
     .eq('status', 'completed')
     .order('evaluation_year', { ascending: true })
     .order('evaluation_month', { ascending: true })
+
+  // 同じ企業の評価のみフィルタ
+  const filteredEvaluations = evaluations?.filter(e => e.staff?.company_id === currentUser.company_id)
 
   // 部門別の統計
   const departmentStats = (evaluations || []).reduce((acc: any, evaluation: any) => {

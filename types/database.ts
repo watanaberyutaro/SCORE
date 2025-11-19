@@ -289,6 +289,41 @@ export type Database = {
           answered_at?: string | null
         }
       }
+      evaluation_categories: {
+        Row: {
+          id: string
+          category_key: string
+          category_label: string
+          description: string | null
+          display_order: number
+          is_default: boolean
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          category_key: string
+          category_label: string
+          description?: string | null
+          display_order?: number
+          is_default?: boolean
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          category_key?: string
+          category_label?: string
+          description?: string | null
+          display_order?: number
+          is_default?: boolean
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
       evaluation_items_master: {
         Row: {
           id: string

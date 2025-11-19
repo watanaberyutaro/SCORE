@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     const { data: currentUser } = await supabase
       .from('users')
-      .select('is_admin')
+      .select('is_admin, company_id')
       .eq('id', user.id)
       .single()
 
@@ -29,11 +29,12 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const period = searchParams.get('period')
 
-    // スタッフ一覧を取得
+    // スタッフ一覧を取得（同じ企業のみ）
     const { data: staff, error: staffError } = await supabase
       .from('users')
       .select('*')
       .eq('role', 'staff')
+      .eq('company_id', currentUser.company_id)
       .order('full_name')
 
     if (staffError) throw staffError

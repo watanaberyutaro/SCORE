@@ -43,6 +43,67 @@ export async function PUT(
   }
 }
 
+// PATCH: 面談ステータスを更新（管理者用）
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { goalId: string } }
+) {
+  try {
+    const supabase = await createSupabaseServerClient()
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // 管理者かどうかを確認
+    const { data: userData } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!userData || userData.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const { interview_status } = body
+
+    // interview_statusが有効な値かチェック
+    const validStatuses = ['pending', 'scheduled', 'completed']
+    if (interview_status && !validStatuses.includes(interview_status)) {
+      return NextResponse.json({ error: 'Invalid interview status' }, { status: 400 })
+    }
+
+    const updateData: any = {}
+    if (interview_status) {
+      updateData.interview_status = interview_status
+      if (interview_status === 'completed') {
+        updateData.interviewed_at = new Date().toISOString()
+        updateData.reviewed_by = user.id
+      }
+    }
+
+    const { data: goal, error } = await supabase
+      .from('staff_goals')
+      .update(updateData)
+      .eq('id', params.goalId)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    return NextResponse.json({ data: goal })
+  } catch (error: any) {
+    console.error('Error updating goal interview status:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
 // DELETE: 目標を削除
 export async function DELETE(
   request: NextRequest,

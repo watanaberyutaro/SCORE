@@ -17,27 +17,52 @@ async function getMonthlyEvaluations(year: number, month: number) {
     throw new Error('Unauthorized')
   }
 
-  // 全スタッフの情報を取得
+  // 現在のユーザーのcompany_idを取得
+  const { data: currentUser } = await supabase
+    .from('users')
+    .select('company_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!currentUser) {
+    throw new Error('User not found')
+  }
+
+  // 全スタッフの情報を取得（同じ企業のみ）
   const { data: allStaff } = await supabase
     .from('users')
     .select('id, full_name, department, position, email')
     .eq('role', 'staff')
+    .eq('company_id', currentUser.company_id)
     .order('full_name')
 
-  // 指定された年月の評価データを取得
+  // 指定された年月の評価データを取得（同じ企業のみ）
   const { data: evaluations } = await supabase
     .from('evaluations')
     .select(`
       *,
-      staff:users!evaluations_staff_id_fkey(id, full_name, department, position, email),
-      responses:evaluation_responses(*)
+      staff:users!evaluations_staff_id_fkey(id, full_name, department, position, email, company_id)
     `)
     .eq('evaluation_year', year)
     .eq('evaluation_month', month)
 
+  // 同じ企業の評価のみフィルタ
+  const filteredEvaluations = evaluations?.filter(e => e.staff?.company_id === currentUser.company_id)
+
+  // 各評価のレスポンスを取得
+  const evaluationsWithResponses = await Promise.all(
+    (filteredEvaluations || []).map(async (evaluation) => {
+      const { data: responses } = await supabase
+        .from('evaluation_responses')
+        .select('*')
+        .eq('evaluation_id', evaluation.id)
+      return { ...evaluation, responses: responses || [] }
+    })
+  )
+
   // スタッフごとの評価状況をマッピング
   const staffEvaluations = (allStaff || []).map(staff => {
-    const evaluation = evaluations?.find(e => e.staff_id === staff.id)
+    const evaluation = evaluationsWithResponses?.find(e => e.staff_id === staff.id)
 
     // 現在のユーザーの回答を探す
     const myResponse = evaluation?.responses?.find((r: any) => r.admin_id === user.id)
@@ -62,7 +87,7 @@ async function getMonthlyEvaluations(year: number, month: number) {
     month,
     staffEvaluations,
     totalStaff: allStaff?.length || 0,
-    completedCount: evaluations?.filter(e => e.status === 'completed').length || 0,
+    completedCount: evaluationsWithResponses?.filter(e => e.status === 'completed').length || 0,
     mySubmittedCount: staffEvaluations.filter(s => s.mySubmitted).length,
   }
 }

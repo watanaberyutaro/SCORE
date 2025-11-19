@@ -8,22 +8,46 @@ import { ChevronLeft, ChevronRight, TrendingUp } from 'lucide-react'
 async function getQuarterlyReports(year: number, quarter: number) {
   const supabase = await createSupabaseServerClient()
 
-  // 全スタッフの情報を取得
+  // 現在のユーザーを取得
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error('Unauthorized')
+  }
+
+  // 現在のユーザーのcompany_idを取得
+  const { data: currentUser } = await supabase
+    .from('users')
+    .select('company_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!currentUser) {
+    throw new Error('User not found')
+  }
+
+  // 全スタッフの情報を取得（同じ企業のみ）
   const { data: allStaff } = await supabase
     .from('users')
     .select('id, full_name, department, position, email')
     .eq('role', 'staff')
+    .eq('company_id', currentUser.company_id)
     .order('full_name')
 
-  // 指定された年・四半期の四半期レポートを取得
+  // 指定された年・四半期の四半期レポートを取得（同じ企業のみ）
   const { data: quarterlyReports } = await supabase
     .from('quarterly_reports')
     .select(`
       *,
-      staff:users!quarterly_reports_staff_id_fkey(id, full_name, department, position, email)
+      staff:users!quarterly_reports_staff_id_fkey(id, full_name, department, position, email, company_id)
     `)
     .eq('year', year)
     .eq('quarter', quarter)
+
+  // 同じ企業のレポートのみフィルタ
+  const filteredReports = quarterlyReports?.filter(r => r.staff?.company_id === currentUser.company_id)
 
   // 四半期に含まれる月を計算
   const quarterMonths = [
@@ -32,21 +56,24 @@ async function getQuarterlyReports(year: number, quarter: number) {
     (quarter - 1) * 3 + 3,
   ]
 
-  // 四半期に含まれる月の評価を取得
+  // 四半期に含まれる月の評価を取得（同じ企業のみ）
   const { data: evaluations } = await supabase
     .from('evaluations')
     .select(`
       *,
-      staff:users!evaluations_staff_id_fkey(id, full_name)
+      staff:users!evaluations_staff_id_fkey(id, full_name, company_id)
     `)
     .eq('evaluation_year', year)
     .in('evaluation_month', quarterMonths)
     .eq('status', 'completed')
 
+  // 同じ企業の評価のみフィルタ
+  const filteredEvaluations = evaluations?.filter(e => e.staff?.company_id === currentUser.company_id)
+
   // スタッフごとに四半期レポートをマッピング
   const staffReports = (allStaff || []).map(staff => {
-    const report = quarterlyReports?.find(r => r.staff_id === staff.id)
-    const staffEvaluations = evaluations?.filter(e => e.staff_id === staff.id) || []
+    const report = filteredReports?.find(r => r.staff_id === staff.id)
+    const staffEvaluations = filteredEvaluations?.filter(e => e.staff_id === staff.id) || []
 
     return {
       staff,
@@ -62,7 +89,7 @@ async function getQuarterlyReports(year: number, quarter: number) {
     quarterMonths,
     staffReports,
     totalStaff: allStaff?.length || 0,
-    completedReports: quarterlyReports?.length || 0,
+    completedReports: filteredReports?.length || 0,
   }
 }
 

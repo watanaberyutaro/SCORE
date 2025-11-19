@@ -9,27 +9,31 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Calendar, Settings, Plus, Edit, Trash2, X, Building2 } from 'lucide-react'
-import { EvaluationItemMaster, EvaluationCycle } from '@/types'
+import { Calendar, Settings, Plus, Edit, Trash2, X, Building2, Copy, Check } from 'lucide-react'
+import { EvaluationItemMaster, EvaluationCycle, EvaluationCategoryMaster } from '@/types'
 import { calculatePeriod, getAllPeriods, getPeriodInfo } from '@/lib/utils/period-calculator'
 
 type NewCycle = Omit<EvaluationCycle, 'id' | 'created_at'>
 type NewItem = Omit<EvaluationItemMaster, 'id' | 'created_at'>
+type NewCategory = Omit<EvaluationCategoryMaster, 'id' | 'created_at' | 'updated_at'>
 
 export default function AdminSettingsPage() {
   const [cycles, setCycles] = useState<EvaluationCycle[]>([])
   const [items, setItems] = useState<EvaluationItemMaster[]>([])
+  const [categories, setCategories] = useState<EvaluationCategoryMaster[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'cycles' | 'items'>('cycles')
+  const [activeTab, setActiveTab] = useState<'cycles' | 'items' | 'categories'>('cycles')
 
   // Company info state
   const [companyId, setCompanyId] = useState<string>('')
   const [companyName, setCompanyName] = useState<string>('')
+  const [companyCode, setCompanyCode] = useState<string>('')
   const [establishmentDate, setEstablishmentDate] = useState<string>('')
   const [currentPeriodInfo, setCurrentPeriodInfo] = useState<any>(null)
   const [availablePeriods, setAvailablePeriods] = useState<any[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState<number>(1)
+  const [codeCopied, setCodeCopied] = useState(false)
 
   // Cycle form state
   const [showCycleForm, setShowCycleForm] = useState(false)
@@ -55,6 +59,18 @@ export default function AdminSettingsPage() {
     description: ''
   })
 
+  // Category form state
+  const [showCategoryForm, setShowCategoryForm] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<EvaluationCategoryMaster | null>(null)
+  const [categoryForm, setCategoryForm] = useState<NewCategory>({
+    category_key: '',
+    category_label: '',
+    description: null,
+    display_order: 0,
+    is_default: false,
+    is_active: true
+  })
+
   const supabase = createClient()
 
   useEffect(() => {
@@ -77,7 +93,7 @@ export default function AdminSettingsPage() {
 
       if (!currentUser) throw new Error('ユーザー情報が見つかりません')
 
-      const [companyRes, cyclesRes, itemsRes] = await Promise.all([
+      const [companyRes, cyclesRes, itemsRes, categoriesRes] = await Promise.all([
         supabase
           .from('companies')
           .select('*')
@@ -91,16 +107,22 @@ export default function AdminSettingsPage() {
         supabase
           .from('evaluation_items_master')
           .select('*')
-          .order('category')
+          .order('category'),
+        supabase
+          .from('evaluation_categories')
+          .select('*')
+          .order('display_order')
       ])
 
       if (companyRes.error) throw companyRes.error
       if (cyclesRes.error) throw cyclesRes.error
       if (itemsRes.error) throw itemsRes.error
+      if (categoriesRes.error) throw categoriesRes.error
 
       // Set company info
       setCompanyId(companyRes.data.id)
       setCompanyName(companyRes.data.company_name)
+      setCompanyCode(companyRes.data.company_code || '')
       setEstablishmentDate(companyRes.data.establishment_date || '')
 
       // Calculate period info if establishment date exists
@@ -115,6 +137,7 @@ export default function AdminSettingsPage() {
 
       setCycles(cyclesRes.data || [])
       setItems(itemsRes.data || [])
+      setCategories(categoriesRes.data || [])
     } catch (err: any) {
       console.error('Error fetching data:', err)
       setError(err.message)
@@ -124,6 +147,14 @@ export default function AdminSettingsPage() {
   }
 
   // Company info operations
+  function handleCopyCompanyCode() {
+    if (companyCode) {
+      navigator.clipboard.writeText(companyCode)
+      setCodeCopied(true)
+      setTimeout(() => setCodeCopied(false), 2000)
+    }
+  }
+
   async function handleSaveEstablishmentDate() {
     try {
       setError('')
@@ -328,6 +359,101 @@ export default function AdminSettingsPage() {
     })
   }
 
+  // Category CRUD operations
+  async function handleSaveCategory() {
+    try {
+      setError('')
+
+      // Validate category_key format (alphanumeric and underscore only)
+      if (!/^[a-z0-9_]+$/.test(categoryForm.category_key)) {
+        throw new Error('カテゴリキーは小文字の英数字とアンダースコアのみ使用できます')
+      }
+
+      if (editingCategory) {
+        const { error } = await supabase
+          .from('evaluation_categories')
+          .update({
+            category_label: categoryForm.category_label,
+            description: categoryForm.description,
+            display_order: categoryForm.display_order,
+            is_active: categoryForm.is_active
+          })
+          .eq('id', editingCategory.id)
+
+        if (error) throw error
+      } else {
+        // Check if category_key already exists
+        const { data: existing } = await supabase
+          .from('evaluation_categories')
+          .select('id')
+          .eq('category_key', categoryForm.category_key)
+          .single()
+
+        if (existing) {
+          throw new Error('このカテゴリキーは既に存在します')
+        }
+
+        const { error } = await supabase
+          .from('evaluation_categories')
+          .insert([categoryForm])
+
+        if (error) throw error
+      }
+
+      await fetchData()
+      resetCategoryForm()
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDeleteCategory(id: string, isDefault: boolean) {
+    if (isDefault) {
+      alert('デフォルトカテゴリは削除できません')
+      return
+    }
+
+    if (!confirm('このカテゴリを削除してもよろしいですか？\n※ このカテゴリを使用している評価項目がある場合は削除できません。')) return
+
+    try {
+      // Check if any items use this category
+      const category = categories.find(c => c.id === id)
+      if (category) {
+        const { data: itemsUsingCategory } = await supabase
+          .from('evaluation_items_master')
+          .select('id')
+          .eq('category', category.category_key)
+
+        if (itemsUsingCategory && itemsUsingCategory.length > 0) {
+          throw new Error('このカテゴリを使用している評価項目があるため削除できません。先に評価項目を削除してください。')
+        }
+      }
+
+      const { error } = await supabase
+        .from('evaluation_categories')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      await fetchData()
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  function resetCategoryForm() {
+    setShowCategoryForm(false)
+    setEditingCategory(null)
+    setCategoryForm({
+      category_key: '',
+      category_label: '',
+      description: null,
+      display_order: 0,
+      is_default: false,
+      is_active: true
+    })
+  }
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
       planning: 'bg-yellow-100 text-yellow-800',
@@ -394,6 +520,16 @@ export default function AdminSettingsPage() {
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'categories'
+              ? 'border-b-2 border-blue-500 text-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('categories')}
+        >
+          カテゴリ管理
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'items'
               ? 'border-b-2 border-blue-500 text-blue-600'
               : 'text-gray-500 hover:text-gray-700'
@@ -419,6 +555,46 @@ export default function AdminSettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Company Code Display */}
+              {companyCode && (
+                <div className="p-4 rounded-lg border-2" style={{
+                  borderColor: '#05a7be',
+                  backgroundColor: 'rgba(5, 167, 190, 0.05)'
+                }}>
+                  <Label className="text-black mb-2 block">企業コード（スタッフ登録用）</Label>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 bg-white rounded-lg border-2 p-4" style={{ borderColor: '#05a7be' }}>
+                      <p className="text-3xl font-bold tracking-widest text-center font-mono" style={{ color: '#05a7be' }}>
+                        {companyCode}
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleCopyCompanyCode}
+                      className="h-full px-6"
+                      style={{
+                        backgroundColor: codeCopied ? '#10b981' : '#05a7be',
+                        color: 'white'
+                      }}
+                    >
+                      {codeCopied ? (
+                        <>
+                          <Check className="h-5 w-5 mr-2" />
+                          コピー完了
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-5 w-5 mr-2" />
+                          コピー
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2">
+                    ※ このコードをスタッフに共有してアカウント登録してもらいます
+                  </p>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="company_name" className="text-black">会社名</Label>
@@ -648,6 +824,157 @@ export default function AdminSettingsPage() {
           </CardContent>
         </Card>
         </>
+      )}
+
+      {/* Categories Tab */}
+      {activeTab === 'categories' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center text-lg lg:text-xl">
+                  <Settings className="mr-2 h-5 w-5" />
+                  評価カテゴリ管理
+                </CardTitle>
+                <CardDescription>評価カテゴリの定義と管理</CardDescription>
+              </div>
+              <Button onClick={() => setShowCategoryForm(true)} size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                新規作成
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {showCategoryForm && (
+              <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">
+                    {editingCategory ? 'カテゴリ編集' : '新規カテゴリ'}
+                  </h3>
+                  <Button variant="ghost" size="sm" onClick={resetCategoryForm}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="category_key">カテゴリキー *</Label>
+                    <Input
+                      id="category_key"
+                      value={categoryForm.category_key}
+                      onChange={(e) => setCategoryForm({ ...categoryForm, category_key: e.target.value.toLowerCase() })}
+                      placeholder="custom_category"
+                      disabled={!!editingCategory}
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      小文字の英数字とアンダースコアのみ（例: custom_category）
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="category_label">カテゴリ名 *</Label>
+                    <Input
+                      id="category_label"
+                      value={categoryForm.category_label}
+                      onChange={(e) => setCategoryForm({ ...categoryForm, category_label: e.target.value })}
+                      placeholder="カスタム評価"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="display_order">表示順序 *</Label>
+                    <Input
+                      id="display_order"
+                      type="number"
+                      value={categoryForm.display_order}
+                      onChange={(e) => setCategoryForm({ ...categoryForm, display_order: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2 pt-6">
+                    <input
+                      type="checkbox"
+                      id="is_active"
+                      checked={categoryForm.is_active}
+                      onChange={(e) => setCategoryForm({ ...categoryForm, is_active: e.target.checked })}
+                      className="h-4 w-4"
+                    />
+                    <Label htmlFor="is_active">アクティブ</Label>
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label htmlFor="category_description">説明</Label>
+                    <Textarea
+                      id="category_description"
+                      value={categoryForm.description || ''}
+                      onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value || null })}
+                      placeholder="このカテゴリの説明を入力してください"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button onClick={handleSaveCategory}>
+                    {editingCategory ? '更新' : '作成'}
+                  </Button>
+                  <Button variant="outline" onClick={resetCategoryForm}>
+                    キャンセル
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {categories.map((category) => {
+                const itemCount = items.filter(item => item.category === category.category_key).length
+                return (
+                  <div
+                    key={category.id}
+                    className="flex flex-col md:flex-row md:items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        {category.is_default && (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                            デフォルト
+                          </Badge>
+                        )}
+                        {!category.is_active && (
+                          <Badge variant="outline" className="bg-gray-100 text-gray-600">
+                            無効
+                          </Badge>
+                        )}
+                        <h4 className="font-semibold">{category.category_label}</h4>
+                        <span className="text-xs text-gray-500 font-mono">({category.category_key})</span>
+                      </div>
+                      <p className="text-sm text-gray-600">{category.description || '説明なし'}</p>
+                      <p className="text-sm text-gray-500">
+                        使用中の評価項目: {itemCount}件 | 表示順序: {category.display_order}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 mt-2 md:mt-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingCategory(category)
+                          setCategoryForm(category)
+                          setShowCategoryForm(true)
+                        }}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteCategory(category.id, category.is_default)}
+                        disabled={category.is_default}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Items Tab */}

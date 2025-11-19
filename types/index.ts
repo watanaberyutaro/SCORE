@@ -10,6 +10,7 @@ export type AdminComment = Database['public']['Tables']['admin_comments']['Row']
 export type StaffGoal = Database['public']['Tables']['staff_goals']['Row']
 export type EvaluationQuestion = Database['public']['Tables']['evaluation_questions']['Row']
 export type EvaluationItemMaster = Database['public']['Tables']['evaluation_items_master']['Row']
+export type EvaluationCategoryMaster = Database['public']['Tables']['evaluation_categories']['Row']
 export type EvaluationCycle = Database['public']['Tables']['evaluation_cycles']['Row']
 export type ProductivityData = Database['public']['Tables']['productivity_data']['Row']
 

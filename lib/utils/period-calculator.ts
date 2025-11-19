@@ -42,10 +42,12 @@ export function calculatePeriod(
 
   // 現在の期の開始年を計算
   const periodStartYear = establishmentYear + (periodNumber - 1)
-  const periodStartDate = new Date(periodStartYear, establishmentMonth, 1)
+  // 時刻を12:00に設定してタイムゾーンの影響を回避
+  const periodStartDate = new Date(periodStartYear, establishmentMonth, 1, 12, 0, 0)
 
   // 期の終了日（開始日の11ヶ月後の月末）
-  const periodEndDate = new Date(periodStartYear + 1, establishmentMonth, 0)
+  // 次の年の同じ月の0日目 = 前月の末日（つまり期の最終日）
+  const periodEndDate = new Date(periodStartYear + 1, establishmentMonth, 0, 12, 0, 0)
 
   // 期内の現在の月（1-12）
   const monthInPeriod = (monthsPassed % 12) + 1
@@ -84,10 +86,11 @@ export function getPeriodInfo(
 
   // 指定期の開始年
   const periodStartYear = establishmentYear + (periodNumber - 1)
-  const periodStartDate = new Date(periodStartYear, establishmentMonth, 1)
+  // 時刻を12:00に設定してタイムゾーンの影響を回避
+  const periodStartDate = new Date(periodStartYear, establishmentMonth, 1, 12, 0, 0)
 
-  // 期の終了日
-  const periodEndDate = new Date(periodStartYear + 1, establishmentMonth, 0)
+  // 期の終了日（次の年の同じ月の0日目 = 前月の末日）
+  const periodEndDate = new Date(periodStartYear + 1, establishmentMonth, 0, 12, 0, 0)
 
   return {
     periodNumber,
