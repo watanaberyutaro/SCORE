@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* #ffffff - White background */
+    --background: 0 0% 100%;
+    /* #000000 - Black for text */
+    --foreground: 0 0% 0%;
+    /* #ffffff - White card background */
+    --card: 0 0% 100%;
+    /* #000000 - Black for card text */
+    --card-foreground: 0 0% 0%;
+    /* #ffffff - White popover */
+    --popover: 0 0% 100%;
+    /* #000000 - Black for popover text */
+    --popover-foreground: 0 0% 0%;
+    /* #05a7be - Medium Teal primary */
+    --primary: 190 95% 38%;
+    /* #ffffff - White for primary foreground */
+    --primary-foreground: 0 0% 100%;
+    /* #1ed7cd - Light Cyan secondary */
+    --secondary: 177 76% 48%;
+    /* #000000 - Black for secondary text */
+    --secondary-foreground: 0 0% 0%;
+    /* #18c4b8 - Light Teal muted */
+    --muted: 175 78% 43%;
+    /* #000000 - Black for muted text */
+    --muted-foreground: 0 0% 0%;
+    /* #1ed7cd - Light Cyan accent */
+    --accent: 177 76% 48%;
+    /* #000000 - Black for accent text */
+    --accent-foreground: 0 0% 0%;
+    /* #05a7be - Medium Teal for destructive */
+    --destructive: 190 95% 38%;
+    /* #ffffff - White for destructive text */
+    --destructive-foreground: 0 0% 100%;
+    /* #18c4b8 - Light Teal border */
+    --border: 175 78% 43%;
+    /* #18c4b8 - Light Teal input border */
+    --input: 175 78% 43%;
+    /* #05a7be - Medium Teal ring */
+    --ring: 190 95% 38%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* #017598 - Dark Teal background for dark mode */
+    --background: 194 98% 30%;
+    /* #ffffff - White text for dark mode */
+    --foreground: 0 0% 100%;
+    /* #087ea2 - Medium Dark Teal card */
+    --card: 194 85% 33%;
+    /* #ffffff - White card text */
+    --card-foreground: 0 0% 100%;
+    /* #087ea2 - Medium Dark Teal popover */
+    --popover: 194 85% 33%;
+    /* #ffffff - White popover text */
+    --popover-foreground: 0 0% 100%;
+    /* #1ed7cd - Light Cyan primary */
+    --primary: 177 76% 48%;
+    /* #017598 - Dark Teal for primary text */
+    --primary-foreground: 194 98% 30%;
+    /* #05a7be - Medium Teal secondary */
+    --secondary: 190 95% 38%;
+    /* #ffffff - White for secondary text */
+    --secondary-foreground: 0 0% 100%;
+    /* #087ea2 - Medium Dark Teal muted */
+    --muted: 194 85% 33%;
+    /* #18c4b8 - Light Teal for muted text */
+    --muted-foreground: 175 78% 43%;
+    /* #18c4b8 - Light Teal accent */
+    --accent: 175 78% 43%;
+    /* #ffffff - White for accent text */
+    --accent-foreground: 0 0% 100%;
+    /* #05a7be - Medium Teal destructive */
+    --destructive: 190 95% 38%;
+    /* #ffffff - White for destructive text */
+    --destructive-foreground: 0 0% 100%;
+    /* #18c4b8 - Light Teal border */
+    --border: 175 78% 43%;
+    /* #18c4b8 - Light Teal input */
+    --input: 175 78% 43%;
+    /* #1ed7cd - Light Cyan ring */
+    --ring: 177 76% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
