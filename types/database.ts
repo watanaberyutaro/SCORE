@@ -327,7 +327,7 @@ export type Database = {
       evaluation_items_master: {
         Row: {
           id: string
-          category: 'performance' | 'behavior' | 'growth'
+          category: string
           item_name: string
           min_score: number
           max_score: number
@@ -336,7 +336,7 @@ export type Database = {
         }
         Insert: {
           id?: string
-          category: 'performance' | 'behavior' | 'growth'
+          category: string
           item_name: string
           min_score: number
           max_score: number
@@ -345,7 +345,7 @@ export type Database = {
         }
         Update: {
           id?: string
-          category?: 'performance' | 'behavior' | 'growth'
+          category?: string
           item_name?: string
           min_score?: number
           max_score?: number
