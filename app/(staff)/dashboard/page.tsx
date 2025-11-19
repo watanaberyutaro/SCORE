@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { getRankColor } from '@/lib/utils/evaluation-calculator'
 import { formatDate } from '@/lib/utils/format'
-import { Award, Target, MessageSquare, TrendingUp, TrendingDown, Minus, Calendar, Clock, CheckCircle, AlertCircle, Star, Zap, Trophy, BarChart3 } from 'lucide-react'
+import { Award, Target, MessageSquare, TrendingUp, TrendingDown, Minus, Clock, CheckCircle, AlertCircle, Zap, Trophy, BarChart3 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { redirect } from 'next/navigation'
@@ -115,47 +115,6 @@ async function getDashboardData(userId: string) {
     .eq('staff_id', userId)
     .is('answer', null)
 
-  // 全スタッフの最新評価を取得してランキング計算
-  const { data: allStaffEvaluations } = await supabase
-    .from('evaluations')
-    .select('staff_id, total_score, evaluation_year, evaluation_month')
-    .eq('evaluation_year', latestEvaluation?.evaluation_year || new Date().getFullYear())
-    .eq('evaluation_month', latestEvaluation?.evaluation_month || new Date().getMonth() + 1)
-    .order('total_score', { ascending: false })
-
-  let ranking = 0
-  let totalStaff = 0
-  if (allStaffEvaluations && latestEvaluation) {
-    totalStaff = allStaffEvaluations.length
-    ranking = allStaffEvaluations.findIndex(e => e.staff_id === userId) + 1
-  }
-
-  // 今月の統計（仮想データ - 実際にはログデータから取得）
-  const monthStats = {
-    workDays: 22,
-    attendedDays: 21,
-    lateCount: 1,
-    overtimeHours: 15.5,
-  }
-
-  // 達成バッジの計算
-  const badges = []
-  if (latestEvaluation?.rank === 'S') {
-    badges.push({ icon: Trophy, label: 'S評価達成', color: '#05a7be' })
-  }
-  if (latestEvaluation?.rank === 'A') {
-    badges.push({ icon: Star, label: 'A評価達成', color: '#18c4b8' })
-  }
-  if ((goals?.filter(g => g.status === 'completed').length ?? 0) >= 3) {
-    badges.push({ icon: Target, label: '目標達成マスター', color: '#1ed7cd' })
-  }
-  if (evaluations && evaluations.length >= 3 && evaluations.slice(0, 3).every(e => e.total_score && e.total_score >= 80)) {
-    badges.push({ icon: Zap, label: '連続高評価', color: '#087ea2' })
-  }
-  if (ranking > 0 && ranking <= 3) {
-    badges.push({ icon: Award, label: 'トップ3入り', color: '#017598' })
-  }
-
   return {
     evaluations: evaluations || [],
     latestEvaluation,
@@ -172,10 +131,6 @@ async function getDashboardData(userId: string) {
     activeGoals: goals?.filter(g => g.status === 'active') || [],
     completedGoals: goals?.filter(g => g.status === 'completed') || [],
     unansweredQuestions: unansweredQuestions || 0,
-    ranking,
-    totalStaff,
-    monthStats,
-    badges,
   }
 }
 
@@ -213,7 +168,7 @@ export default async function StaffDashboardPage() {
       </div>
 
       {/* トップ統計カード */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mb-8">
         <Card className="border-2" style={{ borderColor: '#05a7be' }}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-black">期の総合スコア</CardTitle>
@@ -275,80 +230,7 @@ export default async function StaffDashboardPage() {
             )}
           </CardContent>
         </Card>
-
-        <Card className="border-2" style={{ borderColor: '#1ed7cd' }}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-black">順位</CardTitle>
-            <Star className="h-5 w-5" style={{ color: '#1ed7cd' }} />
-          </CardHeader>
-          <CardContent>
-            {data.ranking > 0 ? (
-              <>
-                <div className="text-3xl font-bold text-black">
-                  {data.ranking}位
-                </div>
-                <p className="text-xs text-black mt-1">
-                  全{data.totalStaff}名中
-                </p>
-                <div className="mt-2">
-                  <Progress
-                    value={data.totalStaff > 0 ? ((data.totalStaff - data.ranking + 1) / data.totalStaff) * 100 : 0}
-                  />
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-black">データなし</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-2" style={{ borderColor: '#087ea2' }}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-black">今月の出勤</CardTitle>
-            <Calendar className="h-5 w-5" style={{ color: '#087ea2' }} />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-black">
-              {data.monthStats.attendedDays}/{data.monthStats.workDays}
-            </div>
-            <p className="text-xs text-black mt-1">出勤日数</p>
-            <div className="flex items-center gap-4 mt-2 text-xs text-black">
-              <span>遅刻: {data.monthStats.lateCount}回</span>
-              <span>残業: {data.monthStats.overtimeHours}h</span>
-            </div>
-          </CardContent>
-        </Card>
       </div>
-
-      {/* 達成バッジ */}
-      {data.badges.length > 0 && (
-        <Card className="mb-8" style={{ background: 'linear-gradient(135deg, #1ed7cd15, #18c4b815)' }}>
-          <CardHeader>
-            <CardTitle className="flex items-center text-black">
-              <Trophy className="mr-2 h-5 w-5" style={{ color: '#05a7be' }} />
-              達成バッジ
-            </CardTitle>
-            <CardDescription className="text-black">あなたが獲得した実績</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-3">
-              {data.badges.map((badge, idx) => {
-                const Icon = badge.icon
-                return (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border-2 shadow-sm"
-                    style={{ borderColor: badge.color }}
-                  >
-                    <Icon className="h-5 w-5" style={{ color: badge.color }} />
-                    <span className="text-sm font-medium text-black">{badge.label}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* メインコンテンツ - 2カラム */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mb-8">
