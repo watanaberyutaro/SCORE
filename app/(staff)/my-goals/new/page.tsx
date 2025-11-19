@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,22 +11,20 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Target, ArrowLeft, Save, Send } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { calculatePeriod, getAllPeriods } from '@/lib/utils/period-calculator'
 
 export default function NewGoalPage() {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
-  // 現在の期を計算
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  const currentMonth = now.getMonth() + 1
-  const currentQuarter = Math.ceil(currentMonth / 3)
+  const [establishmentDate, setEstablishmentDate] = useState<string | null>(null)
+  const [currentPeriod, setCurrentPeriod] = useState<any>(null)
+  const [availablePeriods, setAvailablePeriods] = useState<any[]>([])
 
   const [formData, setFormData] = useState({
-    period_year: currentYear,
-    period_quarter: currentQuarter,
+    period_number: 0,
+    period_quarter: 1,
     achievement_title: '',
     achievement_description: '',
     achievement_kpi: '',
@@ -37,6 +35,48 @@ export default function NewGoalPage() {
     behavior_target_value: '',
     target_date: '',
   })
+
+  useEffect(() => {
+    fetchCompanyInfo()
+  }, [])
+
+  async function fetchCompanyInfo() {
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) return
+
+      const { data: userInfo } = await supabase
+        .from('users')
+        .select('company_id')
+        .eq('id', userData.user.id)
+        .single()
+
+      if (!userInfo) return
+
+      const { data: companyData } = await supabase
+        .from('companies')
+        .select('establishment_date')
+        .eq('id', userInfo.company_id)
+        .single()
+
+      if (companyData?.establishment_date) {
+        setEstablishmentDate(companyData.establishment_date)
+        const period = calculatePeriod(companyData.establishment_date)
+        setCurrentPeriod(period)
+
+        const periods = getAllPeriods(companyData.establishment_date)
+        setAvailablePeriods(periods)
+
+        setFormData(prev => ({
+          ...prev,
+          period_number: period.periodNumber,
+          period_quarter: period.quarterNumber
+        }))
+      }
+    } catch (err) {
+      console.error('Error fetching company info:', err)
+    }
+  }
 
   async function handleSubmit(isDraft: boolean) {
     try {
@@ -52,9 +92,13 @@ export default function NewGoalPage() {
       const { data: userData } = await supabase.auth.getUser()
       if (!userData.user) throw new Error('ユーザーが見つかりません')
 
+      // 期番号から年度を計算
+      const selectedPeriod = availablePeriods.find(p => p.periodNumber === formData.period_number)
+      const periodYear = selectedPeriod ? selectedPeriod.startDate.getFullYear() : new Date().getFullYear()
+
       const goalData = {
         staff_id: userData.user.id,
-        period_year: formData.period_year,
+        period_year: periodYear,
         period_quarter: formData.period_quarter,
         achievement_title: formData.achievement_title || null,
         achievement_description: formData.achievement_description || null,
@@ -116,17 +160,37 @@ export default function NewGoalPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {currentPeriod && (
+              <div className="p-3 rounded-lg mb-4" style={{ backgroundColor: 'rgba(5, 167, 190, 0.1)' }}>
+                <p className="text-sm text-black">
+                  <strong>現在の期:</strong> {currentPeriod.periodName} {currentPeriod.quarterName}
+                </p>
+                <p className="text-xs text-gray-600">
+                  {currentPeriod.startDate.toLocaleDateString('ja-JP')} 〜 {currentPeriod.endDate.toLocaleDateString('ja-JP')}
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="period_year" className="text-black">年度</Label>
-                <Input
-                  id="period_year"
-                  type="number"
-                  value={formData.period_year}
-                  onChange={(e) => setFormData({ ...formData, period_year: parseInt(e.target.value) })}
-                  className="border-2"
+                <Label htmlFor="period_number" className="text-black">期</Label>
+                <select
+                  id="period_number"
+                  value={formData.period_number}
+                  onChange={(e) => setFormData({ ...formData, period_number: parseInt(e.target.value) })}
+                  className="w-full h-10 rounded-md border-2 px-3"
                   style={{ borderColor: '#05a7be' }}
-                />
+                  disabled={availablePeriods.length === 0}
+                >
+                  {availablePeriods.length === 0 ? (
+                    <option value={0}>読み込み中...</option>
+                  ) : (
+                    availablePeriods.map((period) => (
+                      <option key={period.periodNumber} value={period.periodNumber}>
+                        {period.periodName}
+                      </option>
+                    ))
+                  )}
+                </select>
               </div>
               <div>
                 <Label htmlFor="period_quarter" className="text-black">四半期</Label>
@@ -137,10 +201,10 @@ export default function NewGoalPage() {
                   className="w-full h-10 rounded-md border-2 px-3"
                   style={{ borderColor: '#05a7be' }}
                 >
-                  <option value={1}>Q1（1-3月）</option>
-                  <option value={2}>Q2（4-6月）</option>
-                  <option value={3}>Q3（7-9月）</option>
-                  <option value={4}>Q4（10-12月）</option>
+                  <option value={1}>第1四半期</option>
+                  <option value={2}>第2四半期</option>
+                  <option value={3}>第3四半期</option>
+                  <option value={4}>第4四半期</option>
                 </select>
               </div>
               <div>
