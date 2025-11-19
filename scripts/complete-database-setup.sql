@@ -33,6 +33,10 @@ CREATE INDEX IF NOT EXISTS idx_evaluation_items_master_company_id
 ALTER TABLE evaluation_categories
   DROP CONSTRAINT IF EXISTS evaluation_categories_category_key_key;
 
+-- 既存の制約も削除してから再作成
+ALTER TABLE evaluation_categories
+  DROP CONSTRAINT IF EXISTS evaluation_categories_company_category_key;
+
 ALTER TABLE evaluation_categories
   ADD CONSTRAINT evaluation_categories_company_category_key
   UNIQUE (company_id, category_key);
