@@ -9,6 +9,35 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      companies: {
+        Row: {
+          id: string
+          company_code: string
+          company_name: string
+          is_active: boolean
+          settings: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          company_code: string
+          company_name: string
+          is_active?: boolean
+          settings?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          company_code?: string
+          company_name?: string
+          is_active?: boolean
+          settings?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
       users: {
         Row: {
           id: string
@@ -16,6 +45,7 @@ export type Database = {
           full_name: string
           role: 'admin' | 'staff'
           is_admin: boolean
+          company_id: string
           department: string | null
           position: string | null
           hire_date: string | null
@@ -29,6 +59,7 @@ export type Database = {
           full_name: string
           role: 'admin' | 'staff'
           is_admin?: boolean
+          company_id: string
           department?: string | null
           position?: string | null
           hire_date?: string | null
@@ -42,6 +73,7 @@ export type Database = {
           full_name?: string
           role?: 'admin' | 'staff'
           is_admin?: boolean
+          company_id?: string
           department?: string | null
           position?: string | null
           hire_date?: string | null

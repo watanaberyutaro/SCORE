@@ -61,9 +61,29 @@ export function useAuth() {
     }
   }
 
-  async function signIn(email: string, password: string) {
+  async function signIn(email: string, password: string, companyCode: string) {
     try {
-      console.log('サインイン開始:', email)
+      console.log('サインイン開始:', email, 'companyCode:', companyCode)
+
+      // 1. 企業コードの検証
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select('id, company_code, company_name, is_active')
+        .eq('company_code', companyCode)
+        .single()
+
+      if (companyError || !companyData) {
+        console.error('企業コード検証エラー:', companyError)
+        throw new Error('企業コードが正しくありません')
+      }
+
+      if (!companyData.is_active) {
+        throw new Error('この企業アカウントは無効化されています')
+      }
+
+      console.log('企業コード検証成功:', companyData.company_name)
+
+      // 2. 認証
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -75,23 +95,32 @@ export function useAuth() {
       }
 
       console.log('認証成功:', data.user.id)
-      await getUser()
 
-      // ロールに応じてリダイレクト
+      // 3. ユーザー情報取得とcompany_idの検証
       console.log('ユーザー情報取得中...')
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('is_admin')
+        .select('id, email, full_name, role, is_admin, company_id')
         .eq('id', data.user.id)
         .single()
 
       if (userError) {
         console.error('ユーザー情報取得エラー:', userError)
+        await supabase.auth.signOut()
         throw userError
       }
 
-      console.log('ユーザー情報:', userData)
+      // 4. ユーザーが指定した企業に所属しているか確認
+      if (userData.company_id !== companyData.id) {
+        console.error('企業不一致:', { userCompanyId: userData.company_id, inputCompanyId: companyData.id })
+        await supabase.auth.signOut()
+        throw new Error('この企業コードではログインできません')
+      }
 
+      console.log('ユーザー情報:', userData)
+      await getUser()
+
+      // 5. ロールに応じてリダイレクト
       if (userData?.is_admin) {
         console.log('管理者としてリダイレクト: /admin/dashboard')
         router.push('/admin/dashboard')

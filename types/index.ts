@@ -1,6 +1,7 @@
 import { Database } from './database'
 
 // Database types
+export type Company = Database['public']['Tables']['companies']['Row']
 export type User = Database['public']['Tables']['users']['Row']
 export type Evaluation = Database['public']['Tables']['evaluations']['Row']
 export type EvaluationResponse = Database['public']['Tables']['evaluation_responses']['Row']

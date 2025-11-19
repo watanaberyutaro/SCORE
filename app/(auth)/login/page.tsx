@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export default function LoginPage() {
+  const [companyCode, setCompanyCode] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -21,7 +22,7 @@ export default function LoginPage() {
     setLoading(true)
 
     console.log('ログイン処理開始')
-    const result = await signIn(email, password)
+    const result = await signIn(email, password, companyCode)
     console.log('ログイン処理結果:', result)
 
     if (!result.success) {
@@ -49,6 +50,19 @@ export default function LoginPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+
+            <div className="space-y-2">
+              <Label htmlFor="companyCode">企業コード</Label>
+              <Input
+                id="companyCode"
+                type="text"
+                placeholder="SHARE-2017"
+                value={companyCode}
+                onChange={(e) => setCompanyCode(e.target.value.toUpperCase())}
+                required
+                disabled={loading}
+              />
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="email">メールアドレス</Label>
