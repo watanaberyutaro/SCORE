@@ -89,7 +89,10 @@ export type Database = {
         Row: {
           id: string
           staff_id: string
+          cycle_id: string | null
           evaluation_period: string
+          evaluation_year: number | null
+          evaluation_month: number | null
           status: 'draft' | 'submitted' | 'completed'
           total_score: number | null
           rank: 'SS' | 'S' | 'A+' | 'A' | 'A-' | 'B' | 'C' | 'D' | null
@@ -100,7 +103,10 @@ export type Database = {
         Insert: {
           id?: string
           staff_id: string
+          cycle_id?: string | null
           evaluation_period: string
+          evaluation_year?: number | null
+          evaluation_month?: number | null
           status?: 'draft' | 'submitted' | 'completed'
           total_score?: number | null
           rank?: 'SS' | 'S' | 'A+' | 'A' | 'A-' | 'B' | 'C' | 'D' | null
@@ -111,7 +117,10 @@ export type Database = {
         Update: {
           id?: string
           staff_id?: string
+          cycle_id?: string | null
           evaluation_period?: string
+          evaluation_year?: number | null
+          evaluation_month?: number | null
           status?: 'draft' | 'submitted' | 'completed'
           total_score?: number | null
           rank?: 'SS' | 'S' | 'A+' | 'A' | 'A-' | 'B' | 'C' | 'D' | null
@@ -214,6 +223,7 @@ export type Database = {
         Row: {
           id: string
           staff_id: string
+          company_id: string | null
           goal_title: string
           goal_description: string
           target_date: string
@@ -229,6 +239,7 @@ export type Database = {
         Insert: {
           id?: string
           staff_id: string
+          company_id?: string | null
           goal_title: string
           goal_description: string
           target_date: string
@@ -244,6 +255,7 @@ export type Database = {
         Update: {
           id?: string
           staff_id?: string
+          company_id?: string | null
           goal_title?: string
           goal_description?: string
           target_date?: string
@@ -262,6 +274,7 @@ export type Database = {
           id: string
           evaluation_id: string
           staff_id: string
+          company_id: string | null
           question: string
           answer: string | null
           admin_id: string | null
@@ -272,6 +285,7 @@ export type Database = {
           id?: string
           evaluation_id: string
           staff_id: string
+          company_id?: string | null
           question: string
           answer?: string | null
           admin_id?: string | null
@@ -282,6 +296,7 @@ export type Database = {
           id?: string
           evaluation_id?: string
           staff_id?: string
+          company_id?: string | null
           question?: string
           answer?: string | null
           admin_id?: string | null
