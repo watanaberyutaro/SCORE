@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
-import { ClipboardList, CheckCircle, Clock } from 'lucide-react'
+import { ClipboardList, CheckCircle, Clock, Eye } from 'lucide-react'
 
 interface StaffWithEvaluation {
   id: string
@@ -366,22 +366,37 @@ export default function AdminEvaluationsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Link
-                          href={
-                            selectedPeriod
-                              ? `/admin/evaluations/${s.id}?period=${selectedPeriod}`
-                              : `/admin/evaluations/${s.id}?year=${selectedYear}&month=${selectedMonth}`
-                          }
-                        >
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-2"
-                            style={{ borderColor: '#05a7be', color: '#05a7be' }}
+                        <div className="flex gap-2">
+                          <Link
+                            href={`/admin/staff-evaluations/${s.id}`}
                           >
-                            評価する
-                          </Button>
-                        </Link>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-2"
+                              style={{ borderColor: '#6366f1', color: '#6366f1' }}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              詳細
+                            </Button>
+                          </Link>
+                          <Link
+                            href={
+                              selectedPeriod
+                                ? `/admin/evaluations/${s.id}?period=${selectedPeriod}`
+                                : `/admin/evaluations/${s.id}?year=${selectedYear}&month=${selectedMonth}`
+                            }
+                          >
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-2"
+                              style={{ borderColor: '#05a7be', color: '#05a7be' }}
+                            >
+                              評価する
+                            </Button>
+                          </Link>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )
@@ -432,23 +447,39 @@ export default function AdminEvaluationsPage() {
                   </div>
 
                   {/* アクション */}
-                  <Link
-                    href={
-                      selectedPeriod
-                        ? `/admin/evaluations/${s.id}?period=${selectedPeriod}`
-                        : `/admin/evaluations/${s.id}?year=${selectedYear}&month=${selectedMonth}`
-                    }
-                    className="block"
-                  >
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full border-2"
-                      style={{ borderColor: '#05a7be', color: '#05a7be' }}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      href={`/admin/staff-evaluations/${s.id}`}
+                      className="block"
                     >
-                      評価する
-                    </Button>
-                  </Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full border-2"
+                        style={{ borderColor: '#6366f1', color: '#6366f1' }}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        詳細
+                      </Button>
+                    </Link>
+                    <Link
+                      href={
+                        selectedPeriod
+                          ? `/admin/evaluations/${s.id}?period=${selectedPeriod}`
+                          : `/admin/evaluations/${s.id}?year=${selectedYear}&month=${selectedMonth}`
+                      }
+                      className="block"
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full border-2"
+                        style={{ borderColor: '#05a7be', color: '#05a7be' }}
+                      >
+                        評価する
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               )
             })}
