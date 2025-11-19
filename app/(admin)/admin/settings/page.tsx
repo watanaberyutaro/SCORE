@@ -23,7 +23,7 @@ export default function AdminSettingsPage() {
   const [categories, setCategories] = useState<EvaluationCategoryMaster[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'cycles' | 'items' | 'categories'>('cycles')
+  const [activeTab, setActiveTab] = useState<'cycles' | 'evaluation'>('cycles')
 
   // Company info state
   const [companyId, setCompanyId] = useState<string>('')
@@ -347,11 +347,26 @@ export default function AdminSettingsPage() {
     }
   }
 
+  function openItemForm() {
+    // Default to first active category if available
+    const firstActiveCategory = categories.find(c => c.is_active)
+    setItemForm({
+      category: firstActiveCategory?.category_key || 'performance',
+      item_name: '',
+      min_score: 0,
+      max_score: 100,
+      description: ''
+    })
+    setShowItemForm(true)
+  }
+
   function resetItemForm() {
     setShowItemForm(false)
     setEditingItem(null)
+    // Default to first active category if available
+    const firstActiveCategory = categories.find(c => c.is_active)
     setItemForm({
-      category: 'performance',
+      category: firstActiveCategory?.category_key || 'performance',
       item_name: '',
       min_score: 0,
       max_score: 100,
@@ -472,13 +487,9 @@ export default function AdminSettingsPage() {
     )
   }
 
-  const getCategoryLabel = (category: string) => {
-    const labels: Record<string, string> = {
-      performance: '成果評価',
-      behavior: '行動評価',
-      growth: '成長評価',
-    }
-    return labels[category] || category
+  const getCategoryLabel = (categoryKey: string) => {
+    const category = categories.find(c => c.category_key === categoryKey)
+    return category ? category.category_label : categoryKey
   }
 
   if (loading) {
@@ -520,23 +531,13 @@ export default function AdminSettingsPage() {
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === 'categories'
+            activeTab === 'evaluation'
               ? 'border-b-2 border-blue-500 text-blue-600'
               : 'text-gray-500 hover:text-gray-700'
           }`}
-          onClick={() => setActiveTab('categories')}
+          onClick={() => setActiveTab('evaluation')}
         >
-          カテゴリ管理
-        </button>
-        <button
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === 'items'
-              ? 'border-b-2 border-blue-500 text-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-          onClick={() => setActiveTab('items')}
-        >
-          評価項目マスター
+          評価設定
         </button>
       </div>
 
@@ -826,8 +827,10 @@ export default function AdminSettingsPage() {
         </>
       )}
 
-      {/* Categories Tab */}
-      {activeTab === 'categories' && (
+      {/* Evaluation Settings Tab */}
+      {activeTab === 'evaluation' && (
+        <div className="space-y-6">
+          {/* Categories Section */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -975,10 +978,8 @@ export default function AdminSettingsPage() {
             </div>
           </CardContent>
         </Card>
-      )}
 
-      {/* Items Tab */}
-      {activeTab === 'items' && (
+          {/* Items Section */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -989,7 +990,7 @@ export default function AdminSettingsPage() {
                 </CardTitle>
                 <CardDescription>評価項目の定義</CardDescription>
               </div>
-              <Button onClick={() => setShowItemForm(true)} size="sm">
+              <Button onClick={openItemForm} size="sm">
                 <Plus className="h-4 w-4 mr-2" />
                 新規作成
               </Button>
@@ -1015,9 +1016,11 @@ export default function AdminSettingsPage() {
                       onChange={(e) => setItemForm({ ...itemForm, category: e.target.value as any })}
                       className="w-full h-10 rounded-md border border-gray-300 px-3"
                     >
-                      <option value="performance">成果評価</option>
-                      <option value="behavior">行動評価</option>
-                      <option value="growth">成長評価</option>
+                      {categories.filter(c => c.is_active).map((category) => (
+                        <option key={category.id} value={category.category_key}>
+                          {category.category_label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -1110,6 +1113,7 @@ export default function AdminSettingsPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
       )}
     </div>
   )
