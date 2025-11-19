@@ -59,7 +59,7 @@ export function EvaluationCharts({ evaluation, itemCategories }: EvaluationChart
     return result
   }
 
-  // レーダーチャート用のデータを作成
+  // レーダーチャート用のデータを作成（達成率で表示）
   const createRadarData = () => {
     const allItems = [
       ...itemCategories.performance,
@@ -84,9 +84,13 @@ export function EvaluationCharts({ evaluation, itemCategories }: EvaluationChart
         ? scores.reduce((sum, s) => sum + s, 0) / scores.length
         : 0
 
+      // 達成率（パーセンテージ）を計算
+      const achievementRate = item.max > 0 ? (avgScore / item.max) * 100 : 0
+
       return {
         subject: item.label,
         score: parseFloat(avgScore.toFixed(1)),
+        achievementRate: parseFloat(achievementRate.toFixed(1)),
         fullMark: item.max,
       }
     })
@@ -250,13 +254,13 @@ export function EvaluationCharts({ evaluation, itemCategories }: EvaluationChart
               />
               <PolarRadiusAxis
                 angle={90}
-                domain={[0, 'dataMax']}
+                domain={[0, 100]}
                 tick={{ fill: '#000', fontSize: 10 }}
                 stroke="#18c4b8"
               />
               <Radar
                 name="あなたの評価"
-                dataKey="score"
+                dataKey="achievementRate"
                 stroke="#05a7be"
                 strokeWidth={3}
                 fill="url(#radarGradient)"
@@ -287,12 +291,16 @@ export function EvaluationCharts({ evaluation, itemCategories }: EvaluationChart
                             <span>得点:</span>
                             <span className="font-semibold">{data.score} / {data.fullMark}点</span>
                           </p>
+                          <p className="text-sm flex justify-between gap-4" style={{ color: '#000' }}>
+                            <span>達成率:</span>
+                            <span className="font-bold text-[#05a7be]">{data.achievementRate}%</span>
+                          </p>
                           <div className="mt-2 w-full rounded-full h-2" style={{ backgroundColor: '#1ed7cd33' }}>
                             <div
                               className="h-2 rounded-full transition-all"
                               style={{
                                 background: 'linear-gradient(to right, #05a7be, #1ed7cd)',
-                                width: `${(data.score / data.fullMark) * 100}%`
+                                width: `${data.achievementRate}%`
                               }}
                             />
                           </div>
@@ -314,7 +322,7 @@ export function EvaluationCharts({ evaluation, itemCategories }: EvaluationChart
                 <Activity className="h-4 w-4" style={{ color: '#05a7be' }} />
               </div>
               <p className="font-medium" style={{ color: '#000' }}>
-                外側に近いほど高評価を示しています
+                各項目の達成率を表示（外側=100%）
               </p>
             </div>
           </div>
