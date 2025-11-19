@@ -16,7 +16,8 @@ import {
   TrendingUp,
   BookOpen,
   LogOut,
-  Award
+  Award,
+  Users
 } from 'lucide-react'
 
 export function Sidebar() {
@@ -26,9 +27,11 @@ export function Sidebar() {
   const adminNavItems = [
     { href: '/admin/dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
     { href: '/admin/monthly-evaluations', label: '月次評価', icon: ClipboardList },
-    { href: '/admin/quarterly-reports', label: '四半期レポート', icon: TrendingUp },
     { href: '/admin/annual-evaluations', label: '年次評価', icon: Award },
+    { href: '/admin/questions', label: '質問管理', icon: HelpCircle },
+    { href: '/admin/users', label: 'ユーザー管理', icon: Users },
     { href: '/admin/evaluations', label: '評価管理', icon: ClipboardList },
+    { href: '/admin/quarterly-reports', label: '四半期レポート', icon: TrendingUp },
     { href: '/admin/analytics', label: '分析・レポート', icon: BarChart3 },
     { href: '/admin/settings', label: '設定', icon: Settings },
   ]
