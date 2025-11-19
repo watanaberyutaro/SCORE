@@ -3,78 +3,148 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, Award, TrendingUp } from 'lucide-react'
-import { EvaluationRank } from '@/types'
+import { Award, TrendingUp, Eye } from 'lucide-react'
+import { EvaluationRank, EvaluationCycle } from '@/types'
+import { getCurrentUser } from '@/lib/auth/utils'
+import { redirect } from 'next/navigation'
 
-async function getAnnualEvaluations(year: number) {
+async function getAnnualEvaluationsByCycle(cycleId: string, companyId: string) {
   const supabase = await createSupabaseServerClient()
+
+  // 選択されたサイクル情報を取得
+  const { data: cycle } = await supabase
+    .from('evaluation_cycles')
+    .select('*')
+    .eq('id', cycleId)
+    .eq('company_id', companyId)
+    .single()
+
+  if (!cycle) {
+    return null
+  }
 
   // 全スタッフの情報を取得
   const { data: allStaff } = await supabase
     .from('users')
     .select('id, full_name, department, position, email')
     .eq('role', 'staff')
+    .eq('company_id', companyId)
     .order('full_name')
 
-  // 指定された年の年次評価を取得
-  const { data: annualEvaluations } = await supabase
-    .from('annual_evaluations')
-    .select(`
-      *,
-      staff:users!annual_evaluations_staff_id_fkey(id, full_name, department, position, email)
-    `)
-    .eq('year', year)
+  // サイクル期間内の評価を取得（開始日から終了日までの12ヶ月）
+  const startDate = new Date(cycle.start_date)
+  const endDate = new Date(cycle.end_date)
 
-  // その年の全評価を取得
   const { data: evaluations } = await supabase
     .from('evaluations')
-    .select(`
-      *,
-      staff:users!evaluations_staff_id_fkey(id, full_name)
-    `)
-    .eq('evaluation_year', year)
+    .select('*')
     .eq('status', 'completed')
+    .gte('evaluation_year', startDate.getFullYear())
+    .lte('evaluation_year', endDate.getFullYear())
 
-  // スタッフごとに年次評価をマッピング
+  // スタッフごとに評価をグループ化
   const staffEvaluations = (allStaff || []).map(staff => {
-    const annualEval = annualEvaluations?.find(e => e.staff_id === staff.id)
-    const staffEvals = evaluations?.filter(e => e.staff_id === staff.id) || []
+    const staffEvals = evaluations?.filter(e => {
+      if (e.staff_id !== staff.id) return false
+
+      // 評価の年月がサイクル期間内かチェック
+      const evalDate = new Date(e.evaluation_year, e.evaluation_month - 1)
+      return evalDate >= startDate && evalDate <= endDate
+    }) || []
+
+    // 平均スコアを計算
+    const validScores = staffEvals
+      .filter(e => e.total_score !== null)
+      .map(e => e.total_score!)
+
+    const averageScore = validScores.length > 0
+      ? validScores.reduce((sum, score) => sum + score, 0) / validScores.length
+      : null
+
+    // ランクを決定（最新の評価のランクを使用、または平均から計算）
+    const latestRank = staffEvals.length > 0 ? staffEvals[staffEvals.length - 1].rank : null
 
     return {
       staff,
-      annualEvaluation: annualEval,
       monthlyCount: staffEvals.length,
       hasAllMonths: staffEvals.length === 12,
+      averageScore,
+      rank: latestRank,
+      evaluations: staffEvals
     }
   })
 
   // ランク別の集計
-  const rankDistribution = annualEvaluations?.reduce((acc, evaluation) => {
-    if (evaluation.rank) {
-      acc[evaluation.rank] = (acc[evaluation.rank] || 0) + 1
+  const rankDistribution = staffEvaluations.reduce((acc, se) => {
+    if (se.rank) {
+      acc[se.rank as EvaluationRank] = (acc[se.rank as EvaluationRank] || 0) + 1
     }
     return acc
-  }, {} as Record<EvaluationRank, number>) || {}
+  }, {} as Record<EvaluationRank, number>)
 
   return {
-    year,
+    cycle,
     staffEvaluations,
     totalStaff: allStaff?.length || 0,
-    completedEvaluations: annualEvaluations?.length || 0,
+    completedEvaluations: staffEvaluations.filter(se => se.hasAllMonths).length,
     rankDistribution,
   }
+}
+
+async function getAllCycles(companyId: string) {
+  const supabase = await createSupabaseServerClient()
+
+  const { data: cycles } = await supabase
+    .from('evaluation_cycles')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('start_date', { ascending: false })
+
+  return cycles || []
 }
 
 export default async function AnnualEvaluationsPage({
   searchParams
 }: {
-  searchParams: { year?: string }
+  searchParams: { cycle_id?: string }
 }) {
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  const year = searchParams.year ? parseInt(searchParams.year) : currentYear
+  const user = await getCurrentUser()
+  if (!user) {
+    redirect('/login')
+  }
 
-  const data = await getAnnualEvaluations(year)
+  const cycles = await getAllCycles(user.company_id)
+
+  // デフォルトでアクティブなサイクル、またはなければ最新のサイクルを選択
+  const defaultCycle = cycles.find(c => c.status === 'active') || cycles[0]
+  const selectedCycleId = searchParams.cycle_id || defaultCycle?.id
+
+  if (!selectedCycleId || cycles.length === 0) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">年次評価</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            期ごとの評価を管理します
+          </p>
+        </div>
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-gray-500">評価サイクルが設定されていません</p>
+            <Link href="/admin/settings">
+              <Button className="mt-4">設定ページへ</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const data = await getAnnualEvaluationsByCycle(selectedCycleId, user.company_id)
+
+  if (!data) {
+    redirect('/admin/annual-evaluations')
+  }
 
   const progressPercentage = data.totalStaff > 0
     ? Math.round((data.completedEvaluations / data.totalStaff) * 100)
@@ -92,41 +162,65 @@ export default async function AnnualEvaluationsPage({
     'D': 'bg-red-50 text-red-700 border-red-200',
   }
 
+  const statusColors = {
+    'planning': 'bg-yellow-100 text-yellow-800',
+    'active': 'bg-green-100 text-green-800',
+    'completed': 'bg-gray-100 text-gray-800',
+  }
+
+  const statusLabels = {
+    'planning': '計画中',
+    'active': '実施中',
+    'completed': '完了',
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">年次評価</h1>
         <p className="mt-2 text-sm text-gray-600">
-          12ヶ月の評価平均とランクを確認します
+          期ごとの12ヶ月評価を管理します
         </p>
       </div>
 
-      {/* 年選択 */}
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <Link href={`/admin/annual-evaluations?year=${year - 1}`}>
-              <Button variant="outline" size="sm">
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                前年
-              </Button>
-            </Link>
+      {/* サイクル選択 */}
+      <Card className="mb-6 border-2" style={{ borderColor: '#05a7be' }}>
+        <CardHeader>
+          <CardTitle className="text-black">評価期の選択</CardTitle>
+          <CardDescription className="text-black">
+            評価サイクルを選択してください
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <select
+            value={selectedCycleId}
+            onChange={(e) => {
+              window.location.href = `/admin/annual-evaluations?cycle_id=${e.target.value}`
+            }}
+            className="w-full rounded-md border-2 px-4 py-3 text-black focus:border-[#05a7be] focus:ring-2 focus:ring-[#05a7be]/20"
+            style={{ borderColor: '#05a7be' }}
+          >
+            {cycles.map(cycle => (
+              <option key={cycle.id} value={cycle.id}>
+                {cycle.cycle_name} ({new Date(cycle.start_date).toLocaleDateString('ja-JP')} 〜 {new Date(cycle.end_date).toLocaleDateString('ja-JP')})
+              </option>
+            ))}
+          </select>
 
-            <div className="text-center">
-              <div className="text-3xl font-bold text-gray-900">
-                {year}年度
-              </div>
-              <div className="mt-2 text-sm text-gray-600">
-                年次評価完了: {data.completedEvaluations} / {data.totalStaff} ({progressPercentage}%)
-              </div>
+          {/* 選択中のサイクル情報 */}
+          <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: 'rgba(5, 167, 190, 0.1)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-lg font-bold text-black">{data.cycle.cycle_name}</p>
+              <Badge className={statusColors[data.cycle.status]}>
+                {statusLabels[data.cycle.status]}
+              </Badge>
             </div>
-
-            <Link href={`/admin/annual-evaluations?year=${year + 1}`}>
-              <Button variant="outline" size="sm">
-                次年
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </Link>
+            <p className="text-sm text-black">
+              <strong>期間:</strong> {new Date(data.cycle.start_date).toLocaleDateString('ja-JP')} 〜 {new Date(data.cycle.end_date).toLocaleDateString('ja-JP')}
+            </p>
+            <div className="mt-2 text-sm text-black">
+              <strong>完了率:</strong> {data.completedEvaluations} / {data.totalStaff} ({progressPercentage}%)
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -138,12 +232,12 @@ export default async function AnnualEvaluationsPage({
             <Award className="h-5 w-5" />
             ランク分布
           </CardTitle>
-          <CardDescription>{year}年度の評価ランク分布</CardDescription>
+          <CardDescription>{data.cycle.cycle_name}の評価ランク分布</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
             {(['SS', 'S', 'A+', 'A', 'A-', 'B', 'C', 'D'] as EvaluationRank[]).map(rank => (
-              <div key={rank} className="text-center p-3 border rounded-lg">
+              <div key={rank} className="text-center p-3 border border-gray-200 rounded-lg">
                 <Badge variant="outline" className={`mb-2 ${rankColors[rank]}`}>
                   {rank}
                 </Badge>
@@ -162,37 +256,38 @@ export default async function AnnualEvaluationsPage({
         <CardHeader>
           <CardTitle>スタッフ年次評価一覧</CardTitle>
           <CardDescription>
-            {year}年度の評価状況
+            {data.cycle.cycle_name}の評価状況
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {data.staffEvaluations.map(({ staff, annualEvaluation, monthlyCount, hasAllMonths }) => (
+          {/* PC: テーブル表示 */}
+          <div className="hidden lg:block space-y-3">
+            {data.staffEvaluations.map(({ staff, monthlyCount, hasAllMonths, averageScore, rank }) => (
               <div
                 key={staff.id}
-                className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <p className="font-medium">{staff.full_name}</p>
-                    {annualEvaluation ? (
+                    {hasAllMonths ? (
                       <>
                         <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                           年次評価完了
                         </Badge>
-                        <Badge variant="outline" className={rankColors[annualEvaluation.rank as EvaluationRank] || 'bg-gray-50 text-gray-700 border-gray-200'}>
-                          <Award className="h-3 w-3 mr-1" />
-                          ランク: {annualEvaluation.rank}
-                        </Badge>
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                          <TrendingUp className="h-3 w-3 mr-1" />
-                          平均: {annualEvaluation.average_score?.toFixed(2)}点
-                        </Badge>
+                        {rank && (
+                          <Badge variant="outline" className={rankColors[rank as EvaluationRank] || 'bg-gray-50 text-gray-700 border-gray-200'}>
+                            <Award className="h-3 w-3 mr-1" />
+                            ランク: {rank}
+                          </Badge>
+                        )}
+                        {averageScore !== null && (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                            <TrendingUp className="h-3 w-3 mr-1" />
+                            平均: {averageScore.toFixed(2)}点
+                          </Badge>
+                        )}
                       </>
-                    ) : hasAllMonths ? (
-                      <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                        評価完了・ランク未確定
-                      </Badge>
                     ) : (
                       <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
                         評価不足 ({monthlyCount}/12ヶ月)
@@ -202,26 +297,79 @@ export default async function AnnualEvaluationsPage({
                   <p className="text-sm text-gray-500 mt-1">
                     {staff.department} - {staff.position}
                   </p>
-                  {annualEvaluation && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      評価回数: {annualEvaluation.evaluation_count}回
-                    </p>
-                  )}
                 </div>
                 <div className="flex gap-2">
-                  {annualEvaluation && (
-                    <Link href={`/admin/annual-evaluations/${staff.id}?year=${year}`}>
-                      <Button size="sm" variant="outline">
-                        詳細を見る
-                      </Button>
-                    </Link>
-                  )}
-                  <Link href={`/admin/monthly-evaluations?year=${year}&month=1`}>
-                    <Button size="sm" variant="ghost">
-                      月次評価へ
+                  <Link href={`/admin/annual-evaluations/${staff.id}?cycle_id=${selectedCycleId}`}>
+                    <Button size="sm" variant="outline" className="border-2" style={{ borderColor: '#6366f1', color: '#6366f1' }}>
+                      <Eye className="h-4 w-4 mr-1" />
+                      詳細を見る
                     </Button>
                   </Link>
                 </div>
+              </div>
+            ))}
+          </div>
+
+          {/* スマホ: カード表示 */}
+          <div className="lg:hidden space-y-3">
+            {data.staffEvaluations.map(({ staff, monthlyCount, hasAllMonths, averageScore, rank }) => (
+              <div
+                key={staff.id}
+                className="border border-gray-200 rounded-lg p-3 space-y-3"
+              >
+                {/* ヘッダー: 名前とランク */}
+                <div className="flex items-center justify-between pb-2 border-b border-gray-200">
+                  <div>
+                    <div className="font-bold text-base text-black">{staff.full_name}</div>
+                    <div className="text-xs text-gray-600 mt-0.5">
+                      {staff.department} · {staff.position}
+                    </div>
+                  </div>
+                  {rank && (
+                    <Badge variant="outline" className={rankColors[rank as EvaluationRank]}>
+                      {rank}
+                    </Badge>
+                  )}
+                </div>
+
+                {/* 評価状況 */}
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-2">
+                    {hasAllMonths ? (
+                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 w-fit">
+                        年次評価完了
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200 w-fit">
+                        評価不足 ({monthlyCount}/12ヶ月)
+                      </Badge>
+                    )}
+                  </div>
+                  {averageScore !== null && (
+                    <div className="text-right">
+                      <div className="text-xs text-gray-600">平均スコア</div>
+                      <div className="text-lg font-bold text-black">
+                        {averageScore.toFixed(2)}点
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* アクション */}
+                <Link
+                  href={`/admin/annual-evaluations/${staff.id}?cycle_id=${selectedCycleId}`}
+                  className="block"
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-2"
+                    style={{ borderColor: '#6366f1', color: '#6366f1' }}
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    詳細を見る
+                  </Button>
+                </Link>
               </div>
             ))}
           </div>

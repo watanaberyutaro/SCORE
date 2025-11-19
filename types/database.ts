@@ -306,6 +306,7 @@ export type Database = {
       evaluation_cycles: {
         Row: {
           id: string
+          company_id: string
           cycle_name: string
           start_date: string
           end_date: string
@@ -317,6 +318,7 @@ export type Database = {
         }
         Insert: {
           id?: string
+          company_id: string
           cycle_name: string
           start_date: string
           end_date: string
@@ -328,6 +330,7 @@ export type Database = {
         }
         Update: {
           id?: string
+          company_id?: string
           cycle_name?: string
           start_date?: string
           end_date?: string

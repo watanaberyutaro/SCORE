@@ -3,11 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { ArrowLeft, Award, TrendingUp, Calendar, BarChart3 } from 'lucide-react'
-import { notFound } from 'next/navigation'
-import { EvaluationRank } from '@/types'
+import { ArrowLeft, Calendar, TrendingUp, Award, Eye, BarChart3 } from 'lucide-react'
+import { getCurrentUser } from '@/lib/auth/utils'
+import { redirect } from 'next/navigation'
 
-async function getAnnualEvaluationDetail(staffId: string, year: number) {
+async function getStaffAnnualEvaluationDetail(staffId: string, cycleId: string, companyId: string) {
   const supabase = await createSupabaseServerClient()
 
   // スタッフ情報を取得
@@ -15,285 +15,436 @@ async function getAnnualEvaluationDetail(staffId: string, year: number) {
     .from('users')
     .select('*')
     .eq('id', staffId)
+    .eq('company_id', companyId)
     .single()
 
-  if (!staff) return null
+  if (!staff) {
+    return null
+  }
 
-  // 年次評価を取得
-  const { data: annualEvaluation } = await supabase
-    .from('annual_evaluations')
+  // サイクル情報を取得
+  const { data: cycle } = await supabase
+    .from('evaluation_cycles')
     .select('*')
-    .eq('staff_id', staffId)
-    .eq('year', year)
+    .eq('id', cycleId)
+    .eq('company_id', companyId)
     .single()
 
-  // 四半期レポートを取得
-  const { data: quarterlyReports } = await supabase
-    .from('quarterly_reports')
-    .select('*')
-    .eq('staff_id', staffId)
-    .eq('year', year)
-    .order('quarter', { ascending: true })
+  if (!cycle) {
+    return null
+  }
 
-  // 月次評価を取得
+  // サイクル期間内の月を生成
+  const startDate = new Date(cycle.start_date)
+  const endDate = new Date(cycle.end_date)
+
+  const months: { year: number; month: number; label: string }[] = []
+  const currentDate = new Date(startDate)
+
+  while (currentDate <= endDate) {
+    months.push({
+      year: currentDate.getFullYear(),
+      month: currentDate.getMonth() + 1,
+      label: `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月`
+    })
+    currentDate.setMonth(currentDate.getMonth() + 1)
+  }
+
+  // 各月の評価を取得
   const { data: evaluations } = await supabase
     .from('evaluations')
     .select(`
       *,
-      staff:users!evaluations_staff_id_fkey(id, full_name),
       responses:evaluation_responses(
         *,
-        admin:users!evaluation_responses_admin_id_fkey(full_name),
-        items:evaluation_items(*)
+        admin:users!evaluation_responses_admin_id_fkey(full_name)
       )
     `)
     .eq('staff_id', staffId)
-    .eq('evaluation_year', year)
     .eq('status', 'completed')
-    .order('evaluation_month', { ascending: true })
+
+  // 月ごとの評価をマッピング
+  const monthlyEvaluations = months.map(({ year, month, label }) => {
+    const evaluation = evaluations?.find(
+      e => e.evaluation_year === year && e.evaluation_month === month
+    )
+
+    return {
+      year,
+      month,
+      label,
+      evaluation,
+      hasEvaluation: !!evaluation,
+      totalScore: evaluation?.total_score || null,
+      rank: evaluation?.rank || null,
+      responseCount: evaluation?.responses?.length || 0
+    }
+  })
+
+  // 統計情報を計算
+  const completedMonths = monthlyEvaluations.filter(m => m.hasEvaluation).length
+  const validScores = monthlyEvaluations
+    .filter(m => m.totalScore !== null)
+    .map(m => m.totalScore!)
+
+  const averageScore = validScores.length > 0
+    ? validScores.reduce((sum, score) => sum + score, 0) / validScores.length
+    : null
+
+  // 最新の評価のランクを取得
+  const latestEvaluation = monthlyEvaluations.reverse().find(m => m.hasEvaluation)
+  const currentRank = latestEvaluation?.rank || null
+  monthlyEvaluations.reverse() // 元の順序に戻す
+
+  // カテゴリ別の平均スコアを計算
+  let performanceScores: number[] = []
+  let behaviorScores: number[] = []
+  let growthScores: number[] = []
+
+  evaluations?.forEach(e => {
+    if (e.performance_score !== null) performanceScores.push(e.performance_score)
+    if (e.behavior_score !== null) behaviorScores.push(e.behavior_score)
+    if (e.growth_score !== null) growthScores.push(e.growth_score)
+  })
+
+  const avgPerformance = performanceScores.length > 0
+    ? performanceScores.reduce((sum, s) => sum + s, 0) / performanceScores.length
+    : null
+  const avgBehavior = behaviorScores.length > 0
+    ? behaviorScores.reduce((sum, s) => sum + s, 0) / behaviorScores.length
+    : null
+  const avgGrowth = growthScores.length > 0
+    ? growthScores.reduce((sum, s) => sum + s, 0) / growthScores.length
+    : null
 
   return {
     staff,
-    annualEvaluation,
-    quarterlyReports: quarterlyReports || [],
-    evaluations: evaluations || [],
-    year,
+    cycle,
+    months,
+    monthlyEvaluations,
+    completedMonths,
+    totalMonths: months.length,
+    averageScore,
+    currentRank,
+    categoryAverages: {
+      performance: avgPerformance,
+      behavior: avgBehavior,
+      growth: avgGrowth
+    }
   }
 }
 
-export default async function AnnualEvaluationDetailPage({
+export default async function StaffAnnualEvaluationDetailPage({
   params,
   searchParams
 }: {
   params: { staffId: string }
-  searchParams: { year?: string }
+  searchParams: { cycle_id?: string }
 }) {
-  const now = new Date()
-  const year = searchParams.year ? parseInt(searchParams.year) : now.getFullYear()
+  const user = await getCurrentUser()
+  if (!user) {
+    redirect('/login')
+  }
 
-  const data = await getAnnualEvaluationDetail(params.staffId, year)
+  const cycleId = searchParams.cycle_id
+  if (!cycleId) {
+    redirect('/admin/annual-evaluations')
+  }
+
+  const data = await getStaffAnnualEvaluationDetail(params.staffId, cycleId, user.company_id)
 
   if (!data) {
-    notFound()
+    redirect('/admin/annual-evaluations')
   }
 
-  const { staff, annualEvaluation, quarterlyReports, evaluations } = data
+  const progressPercentage = Math.round((data.completedMonths / data.totalMonths) * 100)
 
-  // ランクの色を定義
-  const rankColors: Record<EvaluationRank, string> = {
-    'SS': 'bg-purple-100 text-purple-900 border-purple-300',
-    'S': 'bg-blue-100 text-blue-900 border-blue-300',
-    'A+': 'bg-cyan-100 text-cyan-900 border-cyan-300',
-    'A': 'bg-green-100 text-green-900 border-green-300',
-    'A-': 'bg-lime-100 text-lime-900 border-lime-300',
-    'B': 'bg-yellow-100 text-yellow-900 border-yellow-300',
-    'C': 'bg-orange-100 text-orange-900 border-orange-300',
-    'D': 'bg-red-100 text-red-900 border-red-300',
-  }
-
-  // ランクの報酬額を定義
-  const rankRewards: Record<EvaluationRank, number> = {
-    'SS': 150000,
-    'S': 100000,
-    'A+': 75000,
-    'A': 50000,
-    'A-': 30000,
-    'B': 0,
-    'C': -30000,
-    'D': -50000,
+  const rankColors: Record<string, string> = {
+    'SS': 'bg-purple-50 text-purple-700 border-purple-200',
+    'S': 'bg-blue-50 text-blue-700 border-blue-200',
+    'A+': 'bg-cyan-50 text-cyan-700 border-cyan-200',
+    'A': 'bg-green-50 text-green-700 border-green-200',
+    'A-': 'bg-lime-50 text-lime-700 border-lime-200',
+    'B': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+    'C': 'bg-orange-50 text-orange-700 border-orange-200',
+    'D': 'bg-red-50 text-red-700 border-red-200',
   }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-6">
-        <Link href={`/admin/annual-evaluations?year=${year}`}>
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
+      {/* ヘッダー */}
+      <div className="mb-8">
+        <Link href={`/admin/annual-evaluations?cycle_id=${cycleId}`}>
+          <Button variant="ghost" size="sm" className="mb-4">
+            <ArrowLeft className="h-4 w-4 mr-2" />
             年次評価一覧に戻る
           </Button>
         </Link>
-      </div>
-
-      {/* ヘッダー */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">{staff.full_name}さんの年次評価</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          {year}年度 (1月 - 12月)
-        </p>
-        <div className="mt-2 flex items-center gap-2">
-          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-            {staff.department}
-          </Badge>
-          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-            {staff.position}
-          </Badge>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{data.staff.full_name} の年次評価</h1>
+            <p className="text-sm text-gray-600 mt-2">
+              {data.staff.department} · {data.staff.position}
+            </p>
+            <p className="text-sm text-gray-500 mt-1">
+              {data.cycle.cycle_name} ({new Date(data.cycle.start_date).toLocaleDateString('ja-JP')} 〜 {new Date(data.cycle.end_date).toLocaleDateString('ja-JP')})
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* 年次サマリー */}
-      {annualEvaluation && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Award className="h-5 w-5" />
-              年次サマリー
-            </CardTitle>
-            <CardDescription>12ヶ月の総合評価</CardDescription>
+      {/* サマリーカード */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">評価完了</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="p-6 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg text-center">
-                <p className="text-sm text-gray-600 mb-2">最終ランク</p>
-                <Badge
-                  variant="outline"
-                  className={`text-2xl px-4 py-2 ${rankColors[annualEvaluation.rank as EvaluationRank] || 'bg-gray-100 text-gray-900 border-gray-300'}`}
-                >
-                  {annualEvaluation.rank}
-                </Badge>
-                <p className="text-sm text-gray-600 mt-3">報酬額</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {rankRewards[annualEvaluation.rank as EvaluationRank]?.toLocaleString() || '0'}円
-                </p>
-              </div>
-              <div className="p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">年間平均スコア</p>
-                <p className="text-4xl font-bold text-blue-900">
-                  {annualEvaluation.average_score?.toFixed(2)}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">点 (12ヶ月平均)</p>
-              </div>
-              <div className="p-6 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">評価回数</p>
-                <p className="text-4xl font-bold text-green-900">
-                  {annualEvaluation.evaluation_count}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">回 (完了した月数)</p>
-              </div>
+            <div className="text-3xl font-bold text-gray-900">
+              {data.completedMonths}/{data.totalMonths}
+            </div>
+            <div className="mt-1 text-xs text-gray-500">
+              完了率: {progressPercentage}%
             </div>
           </CardContent>
         </Card>
-      )}
 
-      {/* 四半期別推移 */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">平均スコア</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-blue-600">
+              {data.averageScore !== null ? data.averageScore.toFixed(2) : '-'}
+            </div>
+            <div className="mt-1 text-xs text-gray-500">
+              {data.completedMonths}ヶ月分の平均
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">現在のランク</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data.currentRank ? (
+              <>
+                <Badge className={`text-2xl ${rankColors[data.currentRank]}`}>
+                  {data.currentRank}
+                </Badge>
+                <div className="mt-1 text-xs text-gray-500">
+                  最新評価時点
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-gray-500">未評価</div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">進捗状況</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="w-full bg-gray-200 rounded-full h-4">
+              <div
+                className="bg-green-500 h-4 rounded-full transition-all flex items-center justify-center text-xs font-medium text-white"
+                style={{ width: `${progressPercentage}%` }}
+              >
+                {progressPercentage}%
+              </div>
+            </div>
+            <div className="mt-1 text-xs text-gray-500">
+              {data.completedMonths}ヶ月完了
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* カテゴリ別平均スコア */}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            四半期別推移
+            カテゴリ別平均スコア
           </CardTitle>
-          <CardDescription>3ヶ月ごとの評価推移</CardDescription>
+          <CardDescription>期間全体のカテゴリ別評価平均</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map(quarter => {
-              const report = quarterlyReports.find(r => r.quarter === quarter)
-              const quarterMonths = [
-                (quarter - 1) * 3 + 1,
-                (quarter - 1) * 3 + 2,
-                (quarter - 1) * 3 + 3,
-              ]
-
-              return (
-                <div key={quarter} className="p-4 border rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="font-medium text-gray-900">第{quarter}四半期</p>
-                    {report && (
-                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                        完了
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500 mb-3">
-                    {quarterMonths[0]}月 - {quarterMonths[2]}月
-                  </p>
-                  {report ? (
-                    <>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {report.average_score?.toFixed(2)}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        平均スコア ({report.evaluation_count}ヶ月)
-                      </p>
-                      <Link href={`/admin/quarterly-reports/${params.staffId}?year=${year}&quarter=${quarter}`}>
-                        <Button size="sm" variant="outline" className="w-full mt-3">
-                          詳細を見る
-                        </Button>
-                      </Link>
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-400">未完了</p>
-                  )}
-                </div>
-              )
-            })}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="border-l-4 border-green-500 pl-4 py-3 bg-green-50/30 rounded-r-lg">
+              <p className="text-sm text-gray-600 mb-1">成果評価</p>
+              <p className="text-2xl font-bold text-green-700">
+                {data.categoryAverages.performance !== null
+                  ? data.categoryAverages.performance.toFixed(2)
+                  : '-'}
+              </p>
+            </div>
+            <div className="border-l-4 border-purple-500 pl-4 py-3 bg-purple-50/30 rounded-r-lg">
+              <p className="text-sm text-gray-600 mb-1">行動評価</p>
+              <p className="text-2xl font-bold text-purple-700">
+                {data.categoryAverages.behavior !== null
+                  ? data.categoryAverages.behavior.toFixed(2)
+                  : '-'}
+              </p>
+            </div>
+            <div className="border-l-4 border-orange-500 pl-4 py-3 bg-orange-50/30 rounded-r-lg">
+              <p className="text-sm text-gray-600 mb-1">成長評価</p>
+              <p className="text-2xl font-bold text-orange-700">
+                {data.categoryAverages.growth !== null
+                  ? data.categoryAverages.growth.toFixed(2)
+                  : '-'}
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* 月次評価一覧 */}
+      {/* 月別評価一覧 */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            月次評価詳細
+            月別評価詳細
           </CardTitle>
-          <CardDescription>各月の評価内容</CardDescription>
+          <CardDescription>各月の評価状況と詳細ページへのリンク</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 12 }, (_, i) => i + 1).map(month => {
-              const evaluation = evaluations.find(e => e.evaluation_month === month)
-
-              if (!evaluation) {
-                return (
-                  <div key={month} className="p-4 border border-dashed rounded-lg bg-gray-50">
-                    <div className="text-center">
-                      <p className="font-medium text-gray-400">{month}月</p>
-                      <p className="text-sm text-gray-400 mt-2">評価未完了</p>
-                      <Link href={`/admin/evaluations/${params.staffId}?year=${year}&month=${month}`}>
-                        <Button size="sm" variant="outline" className="mt-3">
-                          評価を入力
+          {/* PC: テーブル形式 */}
+          <div className="hidden md:block">
+            <div className="grid grid-cols-1 gap-3">
+              {data.monthlyEvaluations.map((monthData) => (
+                <div
+                  key={`${monthData.year}-${monthData.month}`}
+                  className={`flex items-center justify-between p-4 border-2 rounded-lg transition-colors ${
+                    monthData.hasEvaluation
+                      ? 'border-green-200 bg-green-50/30 hover:bg-green-50'
+                      : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-gray-500" />
+                      <span className="font-medium text-gray-900">{monthData.label}</span>
+                      {monthData.hasEvaluation ? (
+                        <>
+                          <Badge className="bg-green-100 text-green-800">
+                            評価完了
+                          </Badge>
+                          <span className="text-sm text-gray-600">
+                            回答数: {monthData.responseCount}/3
+                          </span>
+                        </>
+                      ) : (
+                        <Badge className="bg-gray-100 text-gray-800">
+                          未評価
+                        </Badge>
+                      )}
+                    </div>
+                    {monthData.hasEvaluation && (
+                      <div className="mt-2 flex items-center gap-4 text-sm">
+                        <div className="flex items-center gap-1">
+                          <TrendingUp className="h-4 w-4 text-blue-600" />
+                          <span className="text-gray-600">スコア:</span>
+                          <span className="font-medium text-blue-600">
+                            {monthData.totalScore?.toFixed(2)}点
+                          </span>
+                        </div>
+                        {monthData.rank && (
+                          <div className="flex items-center gap-1">
+                            <Award className="h-4 w-4 text-purple-600" />
+                            <span className="text-gray-600">ランク:</span>
+                            <Badge variant="outline" className={rankColors[monthData.rank]}>
+                              {monthData.rank}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="ml-4">
+                    {monthData.hasEvaluation ? (
+                      <Link href={`/admin/staff-evaluations/${params.staffId}?id=${monthData.evaluation.id}`}>
+                        <Button variant="outline" size="sm" className="border-2" style={{ borderColor: '#6366f1', color: '#6366f1' }}>
+                          <Eye className="h-4 w-4 mr-1" />
+                          詳細を見る
                         </Button>
                       </Link>
-                    </div>
+                    ) : (
+                      <Button variant="outline" size="sm" disabled>
+                        未評価
+                      </Button>
+                    )}
                   </div>
-                )
-              }
+                </div>
+              ))}
+            </div>
+          </div>
 
-              return (
-                <div key={month} className="p-4 border rounded-lg hover:bg-green-50 transition-colors">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="font-medium text-gray-900">{month}月</p>
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+          {/* スマホ: カード形式 */}
+          <div className="md:hidden space-y-3">
+            {data.monthlyEvaluations.map((monthData) => (
+              <div
+                key={`${monthData.year}-${monthData.month}`}
+                className={`p-3 border-2 rounded-lg ${
+                  monthData.hasEvaluation
+                    ? 'border-green-200 bg-green-50/30'
+                    : 'border-gray-200 bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-gray-500" />
+                    <span className="font-medium text-gray-900">{monthData.label}</span>
+                  </div>
+                  {monthData.hasEvaluation ? (
+                    <Badge className="bg-green-100 text-green-800 text-xs">
                       完了
                     </Badge>
+                  ) : (
+                    <Badge className="bg-gray-100 text-gray-800 text-xs">
+                      未評価
+                    </Badge>
+                  )}
+                </div>
+
+                {monthData.hasEvaluation && (
+                  <div className="space-y-2 mb-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">スコア</span>
+                      <span className="font-medium text-blue-600">
+                        {monthData.totalScore?.toFixed(2)}点
+                      </span>
+                    </div>
+                    {monthData.rank && (
+                      <div className="flex justify-between text-sm items-center">
+                        <span className="text-gray-600">ランク</span>
+                        <Badge variant="outline" className={rankColors[monthData.rank]}>
+                          {monthData.rank}
+                        </Badge>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">回答数</span>
+                      <span className="font-medium text-gray-900">
+                        {monthData.responseCount}/3
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-3xl font-bold text-gray-900">
-                    {evaluation.total_score?.toFixed(2)}
-                  </p>
-                  <p className="text-xs text-gray-500 mb-3">総合得点</p>
-                  <div className="grid grid-cols-3 gap-1 text-xs">
-                    <div className="text-center p-1 bg-green-50 rounded">
-                      <p className="text-gray-600">成果</p>
-                      <p className="font-semibold">{evaluation.performance_score?.toFixed(1)}</p>
-                    </div>
-                    <div className="text-center p-1 bg-purple-50 rounded">
-                      <p className="text-gray-600">行動</p>
-                      <p className="font-semibold">{evaluation.behavior_score?.toFixed(1)}</p>
-                    </div>
-                    <div className="text-center p-1 bg-orange-50 rounded">
-                      <p className="text-gray-600">成長</p>
-                      <p className="font-semibold">{evaluation.growth_score?.toFixed(1)}</p>
-                    </div>
-                  </div>
-                  <Link href={`/admin/evaluations/${params.staffId}?year=${year}&month=${month}`}>
-                    <Button size="sm" variant="outline" className="w-full mt-3">
+                )}
+
+                {monthData.hasEvaluation && (
+                  <Link href={`/admin/staff-evaluations/${params.staffId}?id=${monthData.evaluation.id}`}>
+                    <Button variant="outline" size="sm" className="w-full border-2" style={{ borderColor: '#6366f1', color: '#6366f1' }}>
+                      <Eye className="h-4 w-4 mr-1" />
                       詳細を見る
                     </Button>
                   </Link>
-                </div>
-              )
-            })}
+                )}
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

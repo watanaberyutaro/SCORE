@@ -56,10 +56,23 @@ export default function AdminSettingsPage() {
     try {
       setLoading(true)
 
+      // Get current user's company_id
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) throw new Error('ユーザーが見つかりません')
+
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('company_id')
+        .eq('id', userData.user.id)
+        .single()
+
+      if (!currentUser) throw new Error('ユーザー情報が見つかりません')
+
       const [cyclesRes, itemsRes] = await Promise.all([
         supabase
           .from('evaluation_cycles')
           .select('*')
+          .eq('company_id', currentUser.company_id)
           .order('start_date', { ascending: false }),
         supabase
           .from('evaluation_items_master')
@@ -85,6 +98,18 @@ export default function AdminSettingsPage() {
     try {
       setError('')
 
+      // Get current user's company_id
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) throw new Error('ユーザーが見つかりません')
+
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('company_id')
+        .eq('id', userData.user.id)
+        .single()
+
+      if (!currentUser) throw new Error('ユーザー情報が見つかりません')
+
       if (editingCycle) {
         const { error } = await supabase
           .from('evaluation_cycles')
@@ -95,7 +120,7 @@ export default function AdminSettingsPage() {
       } else {
         const { error } = await supabase
           .from('evaluation_cycles')
-          .insert([cycleForm])
+          .insert([{ ...cycleForm, company_id: currentUser.company_id }])
 
         if (error) throw error
       }
