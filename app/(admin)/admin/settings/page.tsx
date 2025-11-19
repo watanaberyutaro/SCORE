@@ -312,10 +312,18 @@ export default function AdminSettingsPage() {
       setError('')
 
       if (editingItem) {
+        // 編集時は company_id を変更しない
         const { error } = await supabase
           .from('evaluation_items_master')
-          .update(itemForm)
+          .update({
+            category: itemForm.category,
+            item_name: itemForm.item_name,
+            min_score: itemForm.min_score,
+            max_score: itemForm.max_score,
+            description: itemForm.description,
+          })
           .eq('id', editingItem.id)
+          .eq('company_id', companyId) // 自社のデータのみ更新
 
         if (error) throw error
       } else {
@@ -337,10 +345,11 @@ export default function AdminSettingsPage() {
     if (!confirm('この評価項目を削除してもよろしいですか？')) return
 
     try {
-      const { error} = await supabase
+      const { error } = await supabase
         .from('evaluation_items_master')
         .delete()
         .eq('id', id)
+        .eq('company_id', companyId) // 自社のデータのみ削除
 
       if (error) throw error
       await fetchData()
@@ -396,6 +405,7 @@ export default function AdminSettingsPage() {
             is_active: categoryForm.is_active
           })
           .eq('id', editingCategory.id)
+          .eq('company_id', companyId) // 自社のデータのみ更新
 
         if (error) throw error
       } else {
@@ -441,6 +451,7 @@ export default function AdminSettingsPage() {
           .from('evaluation_items_master')
           .select('id')
           .eq('category', category.category_key)
+          .eq('company_id', companyId) // 自社のデータのみチェック
 
         if (itemsUsingCategory && itemsUsingCategory.length > 0) {
           throw new Error('このカテゴリを使用している評価項目があるため削除できません。先に評価項目を削除してください。')
@@ -451,6 +462,7 @@ export default function AdminSettingsPage() {
         .from('evaluation_categories')
         .delete()
         .eq('id', id)
+        .eq('company_id', companyId) // 自社のデータのみ削除
 
       if (error) throw error
       await fetchData()
