@@ -1,7 +1,11 @@
 -- 評価項目マスターのcategoryフィールドをenumからtextに変更
 -- これにより、動的に追加したカテゴリが使用可能になります
 
--- 既存のenum制約を削除し、textに変更
+-- まず、既存のCHECK制約を削除
+ALTER TABLE evaluation_items_master
+  DROP CONSTRAINT IF EXISTS evaluation_items_master_category_check;
+
+-- categoryフィールドをtextに変更
 ALTER TABLE evaluation_items_master
   ALTER COLUMN category TYPE text;
 
