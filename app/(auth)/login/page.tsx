@@ -56,7 +56,7 @@ export default function LoginPage() {
               <Input
                 id="companyCode"
                 type="text"
-                placeholder="SHARE-2017"
+                placeholder="企業コード"
                 value={companyCode}
                 onChange={(e) => setCompanyCode(e.target.value.toUpperCase())}
                 required
