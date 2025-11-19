@@ -40,6 +40,8 @@ async function getStaffAnnualEvaluationDetail(staffId: string, cycleId: string, 
 
   const months: { year: number; month: number; label: string }[] = []
   const currentDate = new Date(startDate)
+  // 日付を1日に固定して月末の日付による問題を回避
+  currentDate.setDate(1)
 
   while (currentDate <= endDate) {
     months.push({
@@ -47,7 +49,9 @@ async function getStaffAnnualEvaluationDetail(staffId: string, cycleId: string, 
       month: currentDate.getMonth() + 1,
       label: `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月`
     })
+    // 次の月の1日に設定
     currentDate.setMonth(currentDate.getMonth() + 1)
+    currentDate.setDate(1)
   }
 
   // 各月の評価を取得
