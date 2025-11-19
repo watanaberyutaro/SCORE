@@ -392,8 +392,8 @@ export default async function StaffAnnualEvaluationDetailPage({
                     </div>
                   </div>
 
-                  <div className="text-xs text-gray-500 mt-2">
-                    {quarter.months.map(m => m.label.split('年')[1]).join(', ')}
+                  <div className="text-xs text-gray-600 mt-2 font-medium">
+                    {quarter.months.map(m => `${m.month}月`).join(', ')}
                   </div>
                 </div>
               </div>
