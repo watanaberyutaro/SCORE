@@ -7,6 +7,7 @@ import { Award, TrendingUp, Eye } from 'lucide-react'
 import { EvaluationRank, EvaluationCycle } from '@/types'
 import { getCurrentUser } from '@/lib/auth/utils'
 import { redirect } from 'next/navigation'
+import { CycleSelector } from '@/components/annual-evaluations/CycleSelector'
 
 async function getAnnualEvaluationsByCycle(cycleId: string, companyId: string) {
   const supabase = await createSupabaseServerClient()
@@ -146,10 +147,6 @@ export default async function AnnualEvaluationsPage({
     redirect('/admin/annual-evaluations')
   }
 
-  const progressPercentage = data.totalStaff > 0
-    ? Math.round((data.completedEvaluations / data.totalStaff) * 100)
-    : 0
-
   // ランクの色を定義
   const rankColors: Record<EvaluationRank, string> = {
     'SS': 'bg-purple-50 text-purple-700 border-purple-200',
@@ -162,18 +159,6 @@ export default async function AnnualEvaluationsPage({
     'D': 'bg-red-50 text-red-700 border-red-200',
   }
 
-  const statusColors = {
-    'planning': 'bg-yellow-100 text-yellow-800',
-    'active': 'bg-green-100 text-green-800',
-    'completed': 'bg-gray-100 text-gray-800',
-  }
-
-  const statusLabels = {
-    'planning': '計画中',
-    'active': '実施中',
-    'completed': '完了',
-  }
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -184,46 +169,12 @@ export default async function AnnualEvaluationsPage({
       </div>
 
       {/* サイクル選択 */}
-      <Card className="mb-6 border-2" style={{ borderColor: '#05a7be' }}>
-        <CardHeader>
-          <CardTitle className="text-black">評価期の選択</CardTitle>
-          <CardDescription className="text-black">
-            評価サイクルを選択してください
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <select
-            value={selectedCycleId}
-            onChange={(e) => {
-              window.location.href = `/admin/annual-evaluations?cycle_id=${e.target.value}`
-            }}
-            className="w-full rounded-md border-2 px-4 py-3 text-black focus:border-[#05a7be] focus:ring-2 focus:ring-[#05a7be]/20"
-            style={{ borderColor: '#05a7be' }}
-          >
-            {cycles.map(cycle => (
-              <option key={cycle.id} value={cycle.id}>
-                {cycle.cycle_name} ({new Date(cycle.start_date).toLocaleDateString('ja-JP')} 〜 {new Date(cycle.end_date).toLocaleDateString('ja-JP')})
-              </option>
-            ))}
-          </select>
-
-          {/* 選択中のサイクル情報 */}
-          <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: 'rgba(5, 167, 190, 0.1)' }}>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-lg font-bold text-black">{data.cycle.cycle_name}</p>
-              <Badge className={statusColors[data.cycle.status]}>
-                {statusLabels[data.cycle.status]}
-              </Badge>
-            </div>
-            <p className="text-sm text-black">
-              <strong>期間:</strong> {new Date(data.cycle.start_date).toLocaleDateString('ja-JP')} 〜 {new Date(data.cycle.end_date).toLocaleDateString('ja-JP')}
-            </p>
-            <div className="mt-2 text-sm text-black">
-              <strong>完了率:</strong> {data.completedEvaluations} / {data.totalStaff} ({progressPercentage}%)
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <CycleSelector
+        cycles={cycles}
+        selectedCycle={data.cycle}
+        completedEvaluations={data.completedEvaluations}
+        totalStaff={data.totalStaff}
+      />
 
       {/* ランク分布 */}
       <Card className="mb-6">
