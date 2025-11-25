@@ -1,30 +1,91 @@
 import { EvaluationRank, EvaluationFormData, EvaluationScores, RankInfo } from '@/types'
 
+// デフォルトのランク設定（後方互換性のため）
+const DEFAULT_RANKS = [
+  { rank_name: 'SS', min_score: 95, amount: 15000, display_order: 8 },
+  { rank_name: 'S', min_score: 90, amount: 10000, display_order: 7 },
+  { rank_name: 'A+', min_score: 85, amount: 4000, display_order: 6 },
+  { rank_name: 'A', min_score: 80, amount: 3000, display_order: 5 },
+  { rank_name: 'A-', min_score: 75, amount: 2000, display_order: 4 },
+  { rank_name: 'B', min_score: 60, amount: 0, display_order: 3 },
+  { rank_name: 'C', min_score: 40, amount: -5000, display_order: 2 },
+  { rank_name: 'D', min_score: 0, amount: -10000, display_order: 1 },
+]
+
+export interface RankSetting {
+  rank_name: string
+  min_score: number
+  amount: number
+  display_order?: number
+}
+
+export interface EvaluationItemMaster {
+  id: string
+  category: string
+  item_name: string
+  min_score: number
+  max_score: number
+}
+
 /**
  * 評価フォームデータから各カテゴリのスコアと合計スコアを計算
+ * 動的な評価項目に対応
  */
 export function calculateScores(formData: EvaluationFormData): EvaluationScores {
-  // 成果評価スコア (-15 ~ 100点)
+  // 成果評価スコア
   const performanceScore =
     formData.performance.achievement +
     formData.performance.attendance +
     formData.performance.compliance +
     formData.performance.client
 
-  // 行動評価スコア (0 ~ 30点)
+  // 行動評価スコア
   const behaviorScore =
     formData.behavior.initiative +
     formData.behavior.responsibility +
     formData.behavior.cooperation +
     formData.behavior.appearance
 
-  // 成長評価スコア (0 ~ 30点)
+  // 成長評価スコア
   const growthScore =
     formData.growth.selfImprovement +
     formData.growth.response +
     formData.growth.goalAchievement
 
   // 合計スコア
+  const totalScore = performanceScore + behaviorScore + growthScore
+
+  return {
+    performanceScore,
+    behaviorScore,
+    growthScore,
+    totalScore,
+  }
+}
+
+/**
+ * 動的な評価項目からスコアを計算
+ */
+export function calculateScoresFromItems(items: Array<{ category: string; score: number }>): {
+  performanceScore: number
+  behaviorScore: number
+  growthScore: number
+  totalScore: number
+} {
+  let performanceScore = 0
+  let behaviorScore = 0
+  let growthScore = 0
+
+  items.forEach((item) => {
+    if (item.category === 'performance') {
+      performanceScore += item.score
+    } else if (item.category === 'behavior') {
+      behaviorScore += item.score
+    } else if (item.category === 'growth') {
+      growthScore += item.score
+    }
+  })
+
   const totalScore = performanceScore + behaviorScore + growthScore
 
   return {
@@ -45,42 +106,42 @@ export function calculateAverageScore(scores: number[]): number {
 }
 
 /**
- * スコアに基づいてランクを判定
+ * スコアに基づいてランクを判定（動的ランク設定対応）
  */
-export function determineRank(score: number): EvaluationRank {
-  if (score >= 95) return 'SS'
-  if (score >= 90) return 'S'
-  if (score >= 85) return 'A+'
-  if (score >= 80) return 'A'
-  if (score >= 75) return 'A-'
-  if (score >= 60) return 'B'
-  if (score >= 55) return 'C'
-  return 'D'
-}
+export function determineRank(score: number, rankSettings?: RankSetting[]): string {
+  const ranks = rankSettings && rankSettings.length > 0 ? rankSettings : DEFAULT_RANKS
 
-/**
- * ランクに基づいて報酬額を計算
- */
-export function calculateReward(rank: EvaluationRank): number {
-  const rewardMap: Record<EvaluationRank, number> = {
-    'SS': 15000,
-    'S': 10000,
-    'A+': 4000,
-    'A': 3000,
-    'A-': 2000,
-    'B': 0,
-    'C': -5000,
-    'D': -10000,
+  // display_orderの降順でソート（高い順）
+  const sortedRanks = [...ranks].sort((a, b) => b.display_order - a.display_order)
+
+  // スコアが基準を満たす最初のランクを返す
+  for (const rank of sortedRanks) {
+    if (score >= rank.min_score) {
+      return rank.rank_name
+    }
   }
-  return rewardMap[rank]
+
+  // どのランクにも該当しない場合は最低ランクを返す
+  return sortedRanks[sortedRanks.length - 1]?.rank_name || 'D'
 }
 
 /**
- * ランク情報を取得
+ * ランクに基づいて報酬額を計算（動的ランク設定対応）
  */
-export function getRankInfo(rank: EvaluationRank): RankInfo {
-  const reward = calculateReward(rank)
-  const descriptions: Record<EvaluationRank, string> = {
+export function calculateReward(rank: string, rankSettings?: RankSetting[]): number {
+  const ranks = rankSettings && rankSettings.length > 0 ? rankSettings : DEFAULT_RANKS
+  const rankSetting = ranks.find((r) => r.rank_name === rank)
+  return rankSetting?.amount || 0
+}
+
+/**
+ * ランク情報を取得（動的ランク設定対応）
+ */
+export function getRankInfo(rank: string, rankSettings?: RankSetting[]): RankInfo {
+  const reward = calculateReward(rank, rankSettings)
+
+  // デフォルトの説明
+  const defaultDescriptions: Record<string, string> = {
     'SS': '最優秀評価',
     'S': '優秀評価',
     'A+': '非常に良好',
@@ -92,9 +153,9 @@ export function getRankInfo(rank: EvaluationRank): RankInfo {
   }
 
   return {
-    rank,
+    rank: rank as EvaluationRank,
     reward,
-    description: descriptions[rank],
+    description: defaultDescriptions[rank] || rank,
   }
 }
 
@@ -123,21 +184,39 @@ export function getScoreColor(score: number): string {
 }
 
 /**
- * ランクの色を取得（UI表示用）
+ * ランクの色を取得（UI表示用・動的ランク対応）
  * 指定カラーパレットのみ使用: #017598, #087ea2, #05a7be, #18c4b8, #1ed7cd, #ffffff
  */
-export function getRankColor(rank: EvaluationRank): string {
-  const colorMap: Record<EvaluationRank, string> = {
-    'SS': 'bg-[#1ed7cd] text-[#000] border-2 border-[#1ed7cd] font-bold', // 最優秀: Light Cyan bg
-    'S': 'bg-[#18c4b8] text-[#000] border-2 border-[#18c4b8] font-bold',  // 優秀: Light Teal bg
-    'A+': 'bg-[#05a7be] text-[#000] border-2 border-[#05a7be] font-bold',     // 非常に良好: Medium Teal bg
-    'A': 'bg-[#087ea2] text-[#000] border-2 border-[#087ea2] font-bold',      // 良好: Medium Dark Teal bg
-    'A-': 'bg-[#087ea2] text-[#000] border-2 border-[#087ea2]',  // 良好: Medium Dark Teal bg
-    'B': 'bg-[#18c4b8] text-[#000] border-2 border-[#18c4b8]', // 標準: Light Teal bg
-    'C': 'bg-[#087ea2] text-[#000] border-2 border-[#087ea2]', // 改善必要: Medium Dark Teal bg
-    'D': 'bg-[#017598] text-[#000] border-2 border-[#017598] font-bold',      // 大幅改善必要: Dark Teal bg
+export function getRankColor(rank: string, rankSettings?: RankSetting[]): string {
+  const ranks = rankSettings && rankSettings.length > 0 ? rankSettings : DEFAULT_RANKS
+  const sortedRanks = [...ranks].sort((a, b) => b.display_order - a.display_order)
+
+  // ランクのインデックスを取得
+  const rankIndex = sortedRanks.findIndex((r) => r.rank_name === rank)
+  const totalRanks = sortedRanks.length
+
+  // デフォルトの色マッピング（後方互換性）
+  const defaultColorMap: Record<string, string> = {
+    'SS': 'bg-[#1ed7cd] text-[#000] border-2 border-[#1ed7cd] font-bold',
+    'S': 'bg-[#18c4b8] text-[#000] border-2 border-[#18c4b8] font-bold',
+    'A+': 'bg-[#05a7be] text-[#000] border-2 border-[#05a7be] font-bold',
+    'A': 'bg-[#087ea2] text-[#000] border-2 border-[#087ea2] font-bold',
+    'A-': 'bg-[#087ea2] text-[#000] border-2 border-[#087ea2]',
+    'B': 'bg-[#18c4b8] text-[#000] border-2 border-[#18c4b8]',
+    'C': 'bg-[#087ea2] text-[#000] border-2 border-[#087ea2]',
+    'D': 'bg-[#017598] text-[#000] border-2 border-[#017598] font-bold',
   }
-  return colorMap[rank]
+
+  if (defaultColorMap[rank]) {
+    return defaultColorMap[rank]
+  }
+
+  // カスタムランクの場合、位置に基づいて色を割り当て
+  const colors = ['#1ed7cd', '#18c4b8', '#05a7be', '#087ea2', '#017598']
+  const colorIndex = Math.min(Math.floor((rankIndex / totalRanks) * colors.length), colors.length - 1)
+  const color = colors[colorIndex]
+
+  return `bg-[${color}] text-[#000] border-2 border-[${color}] font-bold`
 }
 
 /**
@@ -148,55 +227,90 @@ export function validateScore(score: number, min: number, max: number): boolean 
 }
 
 /**
- * 評価フォームデータのバリデーション
+ * 評価フォームデータのバリデーション（動的評価項目対応）
  */
-export function validateEvaluationForm(formData: EvaluationFormData): {
+export function validateEvaluationForm(
+  formData: EvaluationFormData,
+  itemsMaster?: EvaluationItemMaster[]
+): {
   isValid: boolean
   errors: string[]
 } {
   const errors: string[] = []
 
-  // 成果評価のバリデーション
-  if (!validateScore(formData.performance.achievement, 0, 25)) {
-    errors.push('実績評価は0〜25点の範囲で入力してください')
-  }
-  if (!validateScore(formData.performance.attendance, -5, 5)) {
-    errors.push('勤怠評価は-5〜5点の範囲で入力してください')
-  }
-  if (!validateScore(formData.performance.compliance, -10, 3)) {
-    errors.push('コンプライアンス評価は-10〜3点の範囲で入力してください')
-  }
-  if (!validateScore(formData.performance.client, 0, 15)) {
-    errors.push('クライアント評価は0〜15点の範囲で入力してください')
-  }
+  if (!itemsMaster || itemsMaster.length === 0) {
+    // デフォルトのバリデーション（後方互換性）
+    if (!validateScore(formData.performance.achievement, 0, 25)) {
+      errors.push('実績評価は0〜25点の範囲で入力してください')
+    }
+    if (!validateScore(formData.performance.attendance, -5, 5)) {
+      errors.push('勤怠評価は-5〜5点の範囲で入力してください')
+    }
+    if (!validateScore(formData.performance.compliance, -10, 3)) {
+      errors.push('コンプライアンス評価は-10〜3点の範囲で入力してください')
+    }
+    if (!validateScore(formData.performance.client, 0, 15)) {
+      errors.push('クライアント評価は0〜15点の範囲で入力してください')
+    }
+    if (!validateScore(formData.behavior.initiative, 0, 10)) {
+      errors.push('主体性評価は0〜10点の範囲で入力してください')
+    }
+    if (!validateScore(formData.behavior.responsibility, 0, 7)) {
+      errors.push('責任感は0〜7点の範囲で入力してください')
+    }
+    if (!validateScore(formData.behavior.cooperation, 0, 10)) {
+      errors.push('協調性評価は0〜10点の範囲で入力してください')
+    }
+    if (!validateScore(formData.behavior.appearance, 0, 3)) {
+      errors.push('アピアランス評価は0〜3点の範囲で入力してください')
+    }
+    if (!validateScore(formData.growth.selfImprovement, 0, 7)) {
+      errors.push('自己研鑽評価は0〜7点の範囲で入力してください')
+    }
+    if (!validateScore(formData.growth.response, 0, 5)) {
+      errors.push('レスポンス評価は0〜5点の範囲で入力してください')
+    }
+    if (!validateScore(formData.growth.goalAchievement, 0, 10)) {
+      errors.push('自己目標達成評価は0〜10点の範囲で入力してください')
+    }
+  } else {
+    // 動的な評価項目のバリデーション
+    itemsMaster.forEach((item) => {
+      let score: number | undefined
 
-  // 行動評価のバリデーション
-  if (!validateScore(formData.behavior.initiative, 0, 10)) {
-    errors.push('主体性評価は0〜10点の範囲で入力してください')
-  }
-  if (!validateScore(formData.behavior.responsibility, 0, 7)) {
-    errors.push('責任感は0〜7点の範囲で入力してください')
-  }
-  if (!validateScore(formData.behavior.cooperation, 0, 10)) {
-    errors.push('協調性評価は0〜10点の範囲で入力してください')
-  }
-  if (!validateScore(formData.behavior.appearance, 0, 3)) {
-    errors.push('アピアランス評価は0〜3点の範囲で入力してください')
-  }
+      // カテゴリと項目名に基づいてスコアを取得
+      if (item.category === 'performance') {
+        const key = Object.keys(formData.performance).find((k) =>
+          formData.performance[k as keyof typeof formData.performance] !== undefined
+        )
+        if (key) score = formData.performance[key as keyof typeof formData.performance]
+      } else if (item.category === 'behavior') {
+        const key = Object.keys(formData.behavior).find((k) =>
+          formData.behavior[k as keyof typeof formData.behavior] !== undefined
+        )
+        if (key) score = formData.behavior[key as keyof typeof formData.behavior]
+      } else if (item.category === 'growth') {
+        const key = Object.keys(formData.growth).find((k) =>
+          formData.growth[k as keyof typeof formData.growth] !== undefined
+        )
+        if (key) score = formData.growth[key as keyof typeof formData.growth]
+      }
 
-  // 成長評価のバリデーション
-  if (!validateScore(formData.growth.selfImprovement, 0, 7)) {
-    errors.push('自己研鑽評価は0〜7点の範囲で入力してください')
-  }
-  if (!validateScore(formData.growth.response, 0, 5)) {
-    errors.push('レスポンス評価は0〜5点の範囲で入力してください')
-  }
-  if (!validateScore(formData.growth.goalAchievement, 0, 10)) {
-    errors.push('自己目標達成評価は0〜10点の範囲で入力してください')
+      if (score !== undefined && !validateScore(score, item.min_score, item.max_score)) {
+        errors.push(`${item.item_name}は${item.min_score}〜${item.max_score}点の範囲で入力してください`)
+      }
+    })
   }
 
   return {
     isValid: errors.length === 0,
     errors,
   }
+}
+
+/**
+ * 全てのランク設定を取得（デフォルト含む）
+ */
+export function getAllRanks(rankSettings?: RankSetting[]): RankSetting[] {
+  return rankSettings && rankSettings.length > 0 ? rankSettings : DEFAULT_RANKS
 }
