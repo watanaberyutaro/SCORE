@@ -234,7 +234,7 @@ export default async function EvaluationItemsPage() {
               const description = rankDef.description || ''
 
               // 次のランクの最低点を取得（最大点として使用）
-              const nextRank = rankSettings.length > 0
+              const nextRank: any = rankSettings.length > 0
                 ? rankSettings[index + 1]
                 : (RANK_DEFINITIONS[index + 1] || null)
               const maxScore = nextRank
