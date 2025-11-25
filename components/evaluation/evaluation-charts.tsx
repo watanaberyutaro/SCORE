@@ -26,7 +26,7 @@ export function EvaluationCharts({ evaluation, itemCategories, categories }: Eva
       let totalMax = 0
       let count = 0
 
-      items.forEach((item) => {
+      items.forEach((item: any) => {
         const scores: number[] = []
         evaluation.responses?.forEach((response: any) => {
           // 同じitem_nameの項目がある場合、最新のものを使用
@@ -66,7 +66,7 @@ export function EvaluationCharts({ evaluation, itemCategories, categories }: Eva
     // 全てのカテゴリから項目を動的に収集
     const allItems = Object.values(itemCategories).flat()
 
-    return allItems.map((item) => {
+    return allItems.map((item: any) => {
       const scores: number[] = []
       evaluation.responses?.forEach((response: any) => {
         // 同じitem_nameの項目がある場合、最新のものを使用
