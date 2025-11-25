@@ -9,7 +9,11 @@ async function checkSystemConfiguration() {
   const supabase = await createSupabaseServerClient()
   const user = await getCurrentUser()
 
-  const checks = {
+  const checks: {
+    categories: { status: string; data: any; message: string }
+    items: { status: string; data: any; message: string }
+    rankSettings: { status: string; data: any; message: string }
+  } = {
     categories: { status: 'pending', data: null, message: '' },
     items: { status: 'pending', data: null, message: '' },
     rankSettings: { status: 'pending', data: null, message: '' },
