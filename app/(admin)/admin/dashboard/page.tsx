@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { DashboardClient } from '@/components/admin/dashboard-client'
 import { redirect } from 'next/navigation'
+import { type RankSetting } from '@/lib/utils/evaluation-calculator'
 
 async function getDashboardData() {
   const supabase = await createSupabaseServerClient()
@@ -35,37 +36,65 @@ async function getDashboardData() {
   const currentYear = now.getFullYear()
   const currentMonth = now.getMonth() + 1
 
-  // スタッフ総数（同じ企業のみ）
-  const { count: totalStaff } = await supabase
-    .from('users')
-    .select('*', { count: 'exact', head: true })
-    .eq('role', 'staff')
-    .eq('company_id', currentUser.company_id)
+  // 全てのクエリを並列実行（パフォーマンス改善）
+  const [
+    { count: totalStaff },
+    { data: allStaff },
+    { data: currentMonthEvaluations },
+    { data: allGoals },
+    { data: unansweredQuestions },
+    { data: rankSettings }
+  ] = await Promise.all([
+    // スタッフ総数（同じ企業のみ）
+    supabase
+      .from('users')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'staff')
+      .eq('company_id', currentUser.company_id),
 
-  // 全スタッフの情報を取得（同じ企業のみ）
-  const { data: allStaff } = await supabase
-    .from('users')
-    .select('id, full_name, department, position, email')
-    .eq('role', 'staff')
-    .eq('company_id', currentUser.company_id)
-    .order('full_name')
+    // 全スタッフの情報を取得（同じ企業のみ）
+    supabase
+      .from('users')
+      .select('id, full_name, department, position, email')
+      .eq('role', 'staff')
+      .eq('company_id', currentUser.company_id)
+      .order('full_name'),
 
-  // 今月の評価データを取得（同じ企業のみ）
-  const { data: currentMonthEvaluations } = await supabase
-    .from('evaluations')
-    .select(`
-      *,
-      staff:users!evaluations_staff_id_fkey(id, full_name, department, position, email, company_id)
-    `)
-    .eq('evaluation_year', currentYear)
-    .eq('evaluation_month', currentMonth)
+    // 今月の評価データを取得（同じ企業のみ）
+    supabase
+      .from('evaluations')
+      .select(`
+        id,
+        staff_id,
+        status,
+        staff:users!evaluations_staff_id_fkey(id, full_name, department, position, email, company_id)
+      `)
+      .eq('evaluation_year', currentYear)
+      .eq('evaluation_month', currentMonth),
+
+    // 目標管理のデータを取得（必要なカラムのみ）
+    supabase
+      .from('staff_goals')
+      .select('id, interview_status')
+      .eq('company_id', currentUser.company_id),
+
+    // 未回答の質問を取得（カウントのみ）
+    supabase
+      .from('evaluation_questions')
+      .select('id')
+      .eq('company_id', currentUser.company_id)
+      .is('answer', null),
+
+    // ランク設定を取得
+    supabase
+      .from('rank_settings')
+      .select('rank_name, min_score, amount, display_order')
+      .eq('company_id', currentUser.company_id)
+      .order('display_order', { ascending: false })
+  ])
 
   // 同じ企業の評価のみフィルタ
   const filteredEvaluations = currentMonthEvaluations?.filter(e => e.staff?.company_id === currentUser.company_id)
-
-  console.log('全スタッフ:', allStaff?.length)
-  console.log('今月の評価:', currentYear, '年', currentMonth, '月')
-  console.log('評価データ:', filteredEvaluations?.length)
 
   const evaluations = filteredEvaluations || []
 
@@ -78,34 +107,11 @@ async function getDashboardData() {
     return !hasEvaluation
   })
 
-  console.log('完了:', completedUsers.length, '未完了:', pendingUsers.length)
-
-  // 目標管理のデータを取得（同じ企業のスタッフの目標のみ）
-  const staffIds = (allStaff || []).map(s => s.id)
-  const { data: allGoals } = await supabase
-    .from('staff_goals')
-    .select('*')
-    .in('staff_id', staffIds.length > 0 ? staffIds : [''])
-
   // 面談前の目標（interview_status が pending または scheduled）
   const pendingInterviews = (allGoals || []).filter(g => g.interview_status === 'pending' || g.interview_status === 'scheduled')
 
   // 面談済みの目標（interview_status が completed）
   const completedInterviews = (allGoals || []).filter(g => g.interview_status === 'completed')
-
-  // 未回答の質問を取得（同じ企業のスタッフの質問のみ）
-  const { data: unansweredQuestions } = await supabase
-    .from('evaluation_questions')
-    .select(`
-      *,
-      staff:users!evaluation_questions_staff_id_fkey(id, company_id)
-    `)
-    .is('answer', null)
-
-  // 同じ企業の質問のみフィルタ
-  const filteredUnansweredQuestions = (unansweredQuestions || []).filter(
-    q => q.staff?.company_id === currentUser.company_id
-  )
 
   return {
     totalStaff: totalStaff || 0,
@@ -120,7 +126,9 @@ async function getDashboardData() {
     completedInterviews: completedInterviews.length,
     totalGoals: (allGoals || []).length,
     // 質問管理関連
-    unansweredQuestions: filteredUnansweredQuestions.length,
+    unansweredQuestions: (unansweredQuestions || []).length,
+    // ランク設定
+    rankSettings: (rankSettings || []) as RankSetting[],
   }
 }
 

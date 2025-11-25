@@ -22,33 +22,56 @@ interface RankSetting {
 async function getEvaluationDetail(staffId: string, year: number, month: number, adminCompanyId: string) {
   const supabase = await createSupabaseServerClient()
 
-  // スタッフ情報を取得（同じ企業のみ）
-  const { data: staff } = await supabase
-    .from('users')
-    .select('id, full_name, email, department, position, company_id')
-    .eq('id', staffId)
-    .eq('company_id', adminCompanyId)
-    .single()
+  // クエリを並列実行（パフォーマンス改善）
+  const [
+    { data: staff },
+    { data: evaluation }
+  ] = await Promise.all([
+    // スタッフ情報を取得（同じ企業のみ、必要なカラムのみ）
+    supabase
+      .from('users')
+      .select('id, full_name, email, department, position, company_id')
+      .eq('id', staffId)
+      .eq('company_id', adminCompanyId)
+      .single(),
+
+    // 評価データを取得（必要なカラムのみ）
+    supabase
+      .from('evaluations')
+      .select(`
+        id,
+        staff_id,
+        evaluation_year,
+        evaluation_month,
+        total_score,
+        rank,
+        status,
+        created_at,
+        responses:evaluation_responses(
+          id,
+          admin_id,
+          submitted_at,
+          admin:users!evaluation_responses_admin_id_fkey(full_name),
+          items:evaluation_items(
+            id,
+            category,
+            item_name,
+            score,
+            max_score,
+            comment,
+            created_at
+          )
+        )
+      `)
+      .eq('staff_id', staffId)
+      .eq('evaluation_year', year)
+      .eq('evaluation_month', month)
+      .single()
+  ])
 
   if (!staff) {
     return null
   }
-
-  // 評価データを取得
-  const { data: evaluation } = await supabase
-    .from('evaluations')
-    .select(`
-      *,
-      responses:evaluation_responses(
-        *,
-        admin:users!evaluation_responses_admin_id_fkey(full_name),
-        items:evaluation_items(*)
-      )
-    `)
-    .eq('staff_id', staffId)
-    .eq('evaluation_year', year)
-    .eq('evaluation_month', month)
-    .single()
 
   return {
     staff,

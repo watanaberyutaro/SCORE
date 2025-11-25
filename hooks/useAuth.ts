@@ -12,25 +12,57 @@ export function useAuth() {
   const supabase = createClient()
 
   useEffect(() => {
-    // 初回ユーザー情報の取得
-    getUser()
+    let mounted = true
 
     // 認証状態の変更を監視
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return
+
       if (session?.user) {
-        getUser()
+        // ユーザー情報を取得（1回のみ）
+        try {
+          const { data: userData, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+
+          if (mounted && !error && userData) {
+            setUser(userData)
+          }
+        } catch (error) {
+          // エラー時は何もしない
+        } finally {
+          if (mounted) {
+            setLoading(false)
+          }
+        }
       } else {
-        setUser(null)
+        if (mounted) {
+          setUser(null)
+          setLoading(false)
+        }
+      }
+    })
+
+    // 初回の認証状態を確認
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return
+
+      if (session?.user) {
+        // セッションがある場合、onAuthStateChangeが呼ばれるので何もしない
+      } else {
         setLoading(false)
       }
     })
 
     return () => {
+      mounted = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [supabase])
 
   async function getUser() {
     try {
@@ -54,7 +86,6 @@ export function useAuth() {
 
       setUser(userData)
     } catch (error) {
-      console.error('Error fetching user:', error)
       setUser(null)
     } finally {
       setLoading(false)
@@ -63,8 +94,6 @@ export function useAuth() {
 
   async function signIn(email: string, password: string, companyCode: string) {
     try {
-      console.log('サインイン開始:', email, 'companyCode:', companyCode)
-
       // 1. 企業コードの検証
       const { data: companyData, error: companyError } = await supabase
         .from('companies')
@@ -73,15 +102,12 @@ export function useAuth() {
         .single()
 
       if (companyError || !companyData) {
-        console.error('企業コード検証エラー:', companyError)
         throw new Error('企業コードが正しくありません')
       }
 
       if (!companyData.is_active) {
         throw new Error('この企業アカウントは無効化されています')
       }
-
-      console.log('企業コード検証成功:', companyData.company_name)
 
       // 2. 認証
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -90,48 +116,40 @@ export function useAuth() {
       })
 
       if (error) {
-        console.error('認証エラー:', error)
         throw error
       }
 
-      console.log('認証成功:', data.user.id)
-
-      // 3. ユーザー情報取得とcompany_idの検証
-      console.log('ユーザー情報取得中...')
+      // 3. ユーザー情報取得とcompany_idの検証（全カラム取得）
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('id, email, full_name, role, is_admin, company_id')
+        .select('*')
         .eq('id', data.user.id)
         .single()
 
       if (userError) {
-        console.error('ユーザー情報取得エラー:', userError)
         await supabase.auth.signOut()
         throw userError
       }
 
       // 4. ユーザーが指定した企業に所属しているか確認
       if (userData.company_id !== companyData.id) {
-        console.error('企業不一致:', { userCompanyId: userData.company_id, inputCompanyId: companyData.id })
         await supabase.auth.signOut()
         throw new Error('この企業コードではログインできません')
       }
 
-      console.log('ユーザー情報:', userData)
-      await getUser()
+      // ユーザー情報を直接セット（getUser()の重複呼び出しを削除）
+      setUser(userData)
+      setLoading(false)
 
       // 5. ロールに応じてリダイレクト
       if (userData?.is_admin) {
-        console.log('管理者としてリダイレクト: /admin/dashboard')
         router.push('/admin/dashboard')
       } else {
-        console.log('一般ユーザーとしてリダイレクト: /dashboard')
         router.push('/dashboard')
       }
 
       return { success: true }
     } catch (error: any) {
-      console.error('サインインエラー:', error)
       return { success: false, error: error.message }
     }
   }
@@ -142,7 +160,7 @@ export function useAuth() {
       setUser(null)
       router.push('/login')
     } catch (error) {
-      console.error('Error signing out:', error)
+      // サインアウトエラーは無視（既にログアウト状態の可能性）
     }
   }
 
@@ -231,7 +249,6 @@ export function useAuth() {
 
       return { success: true, companyCode }
     } catch (error: any) {
-      console.error('企業登録エラー:', error)
       return { success: false, error: error.message }
     }
   }
@@ -283,7 +300,6 @@ export function useAuth() {
 
       return { success: true, companyName: companyData.company_name }
     } catch (error: any) {
-      console.error('ユーザー登録エラー:', error)
       return { success: false, error: error.message }
     }
   }
