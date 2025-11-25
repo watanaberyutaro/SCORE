@@ -22,16 +22,17 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
-    console.log('ログイン処理開始')
-    const result = await signIn(email, password, companyCode)
-    console.log('ログイン処理結果:', result)
+    try {
+      const result = await signIn(email, password, companyCode)
 
-    if (!result.success) {
-      console.error('ログイン失敗:', result.error)
-      setError(result.error || 'ログインに失敗しました')
+      if (!result.success) {
+        setError(result.error || 'ログインに失敗しました')
+        setLoading(false)
+      }
+      // 成功時はリダイレクトされるのでloadingをfalseにしない
+    } catch (err) {
+      setError('ログイン処理中にエラーが発生しました')
       setLoading(false)
-    } else {
-      console.log('ログイン成功')
     }
   }
 
