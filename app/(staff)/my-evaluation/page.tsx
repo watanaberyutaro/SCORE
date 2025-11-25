@@ -15,7 +15,9 @@ import { getCategoryName, type CategoryMaster } from '@/lib/utils/category-mappe
 
 // チャートコンポーネントを動的インポート（パフォーマンス最適化）
 const EvaluationCharts = dynamic(
-  () => import('@/components/evaluation/evaluation-charts').then((mod) => mod.EvaluationCharts),
+  () => import('@/components/evaluation/evaluation-charts').then((mod) => ({
+    default: mod.EvaluationCharts
+  })),
   {
     loading: () => (
       <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
