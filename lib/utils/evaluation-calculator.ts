@@ -112,7 +112,7 @@ export function determineRank(score: number, rankSettings?: RankSetting[]): stri
   const ranks = rankSettings && rankSettings.length > 0 ? rankSettings : DEFAULT_RANKS
 
   // display_orderの降順でソート（高い順）
-  const sortedRanks = [...ranks].sort((a, b) => b.display_order - a.display_order)
+  const sortedRanks = [...ranks].sort((a, b) => (b.display_order || 0) - (a.display_order || 0))
 
   // スコアが基準を満たす最初のランクを返す
   for (const rank of sortedRanks) {
@@ -189,7 +189,7 @@ export function getScoreColor(score: number): string {
  */
 export function getRankColor(rank: string, rankSettings?: RankSetting[]): string {
   const ranks = rankSettings && rankSettings.length > 0 ? rankSettings : DEFAULT_RANKS
-  const sortedRanks = [...ranks].sort((a, b) => b.display_order - a.display_order)
+  const sortedRanks = [...ranks].sort((a, b) => (b.display_order || 0) - (a.display_order || 0))
 
   // ランクのインデックスを取得
   const rankIndex = sortedRanks.findIndex((r) => r.rank_name === rank)
