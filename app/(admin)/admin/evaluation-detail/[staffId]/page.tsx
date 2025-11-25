@@ -286,7 +286,7 @@ export default async function AdminEvaluationDetailPage({
           {Object.keys(itemCategories).length > 0 ? (
             <EvaluationCharts
               evaluation={evaluation}
-              itemCategories={itemCategories}
+              itemCategories={itemCategories as Record<string, Array<{ key: string; label: string; max: number }>>}
               categories={categoryMasters}
             />
           ) : null}
