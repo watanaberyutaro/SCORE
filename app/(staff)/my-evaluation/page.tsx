@@ -8,10 +8,26 @@ import { getRewardDisplay } from '@/lib/utils/evaluation-calculator'
 import { Award, TrendingUp, Users, MessageSquare } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { calculateReward } from '@/lib/utils/evaluation-calculator'
-import { EvaluationCharts } from '@/components/evaluation/evaluation-charts'
+import dynamic from 'next/dynamic'
 import { MonthSelector } from '@/components/evaluation/month-selector'
 import { QuarterSelector } from '@/components/evaluation/quarter-selector'
 import { getCategoryName, type CategoryMaster } from '@/lib/utils/category-mapper'
+
+// チャートコンポーネントを動的インポート（パフォーマンス最適化）
+const EvaluationCharts = dynamic(
+  () => import('@/components/evaluation/evaluation-charts').then((mod) => mod.EvaluationCharts),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#05a7be] mx-auto mb-4"></div>
+          <p className="text-sm text-gray-600">チャートを読み込み中...</p>
+        </div>
+      </div>
+    ),
+    ssr: false
+  }
+)
 
 async function getMyEvaluations(userId: string) {
   const supabase = await createSupabaseServerClient()
@@ -355,11 +371,11 @@ export default async function MyEvaluationPage({
   )
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-3xl font-bold text-gray-900">評価結果</h1>
-          <div className="flex gap-3">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+      <div className="mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0 mb-4">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">評価結果</h1>
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             {availableQuarters.length > 0 && (
               <>
                 <QuarterSelector
@@ -381,7 +397,7 @@ export default async function MyEvaluationPage({
             )}
           </div>
         </div>
-        <p className="mt-2 text-sm text-gray-600">
+        <p className="text-xs sm:text-sm text-gray-600">
           管理者からの評価を確認できます
         </p>
       </div>
@@ -389,62 +405,62 @@ export default async function MyEvaluationPage({
       {latestEvaluation ? (
         <>
           {/* サマリーカード */}
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mb-8">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">総合スコア</CardTitle>
-                <Award className="h-4 w-4 text-muted-foreground" />
+          <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-3 mb-6 sm:mb-8">
+            <Card className="shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+                <CardTitle className="text-xs sm:text-sm font-medium">総合スコア</CardTitle>
+                <Award className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
+              <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+                <div className="text-xl sm:text-2xl font-bold">
                   {latestEvaluation.total_score?.toFixed(1) || '-'}点
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                   {latestEvaluation.evaluation_month === 0
                     ? 'クオーター内各月の平均'
                     : '管理者評価の平均'}
                 </p>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">ランク</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <Card className="shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+                <CardTitle className="text-xs sm:text-sm font-medium">ランク</CardTitle>
+                <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                 {latestEvaluation.rank ? (
                   <>
-                    <Badge className={`text-2xl ${getRankColor(latestEvaluation.rank, rankSettings)}`}>
+                    <Badge className={`text-lg sm:text-2xl ${getRankColor(latestEvaluation.rank, rankSettings)}`}>
                       {latestEvaluation.rank}
                     </Badge>
-                    <p className="text-xs text-muted-foreground mt-2">
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-2">
                       {latestEvaluation.evaluation_year && latestEvaluation.evaluation_month
                         ? `${latestEvaluation.evaluation_year}年${latestEvaluation.evaluation_month}月`
                         : '評価期間未設定'}
                     </p>
                   </>
                 ) : (
-                  <p className="text-sm text-gray-500">評価中</p>
+                  <p className="text-xs sm:text-sm text-gray-500">評価中</p>
                 )}
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">報酬</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+            <Card className="shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+                <CardTitle className="text-xs sm:text-sm font-medium">報酬</CardTitle>
+                <Users className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                 {latestEvaluation.rank ? (
                   <>
-                    <div className="text-2xl font-bold">
+                    <div className="text-xl sm:text-2xl font-bold">
                       {getRewardDisplay(calculateReward(latestEvaluation.rank, rankSettings))}
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                       今期の評価報酬
                     </p>
                   </>
                 ) : (
-                  <p className="text-sm text-gray-500">評価中</p>
+                  <p className="text-xs sm:text-sm text-gray-500">評価中</p>
                 )}
               </CardContent>
             </Card>
@@ -458,15 +474,15 @@ export default async function MyEvaluationPage({
           />
 
           {/* 詳細タブ */}
-          <Tabs defaultValue="items" className="space-y-4 mt-8">
-            <TabsList>
-              <TabsTrigger value="items">評価項目別詳細</TabsTrigger>
-              <TabsTrigger value="comments">管理者コメント</TabsTrigger>
+          <Tabs defaultValue="items" className="space-y-4 mt-6 sm:mt-8">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="items" className="text-xs sm:text-sm">評価項目別詳細</TabsTrigger>
+              <TabsTrigger value="comments" className="text-xs sm:text-sm">管理者コメント</TabsTrigger>
             </TabsList>
 
             {/* 評価項目別詳細タブ */}
             <TabsContent value="items">
-              <div className="grid grid-cols-1 gap-6">
+              <div className="grid grid-cols-1 gap-4 sm:gap-6">
                 {/* 動的にカテゴリを表示 */}
                 {categoryMasters.length > 0 ? (
                   categoryMasters.map((categoryMaster) => {
@@ -477,13 +493,13 @@ export default async function MyEvaluationPage({
                     if (categoryItems.length === 0) return null
 
                     return (
-                      <Card key={categoryKey}>
-                        <CardHeader>
-                          <CardTitle className="text-lg">{categoryMaster.category_label}</CardTitle>
-                          <CardDescription>{categoryMaster.description || ''}</CardDescription>
+                      <Card key={categoryKey} className="shadow-sm">
+                        <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
+                          <CardTitle className="text-base sm:text-lg">{categoryMaster.category_label}</CardTitle>
+                          <CardDescription className="text-xs sm:text-sm">{categoryMaster.description || ''}</CardDescription>
                         </CardHeader>
-                        <CardContent>
-                          <div className="space-y-6">
+                        <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+                          <div className="space-y-4 sm:space-y-6">
                             {categoryItems.map((item) => {
                         const allAdminScores: { admin: string; score: number; comment: string | null }[] = []
 
@@ -509,49 +525,49 @@ export default async function MyEvaluationPage({
                           : 0
 
                         return (
-                          <div key={item.key} className={`border-l-4 ${colors.border} pl-4 py-3 ${colors.bg} rounded-r-lg`}>
+                          <div key={item.key} className={`border-l-4 ${colors.border} pl-3 sm:pl-4 py-2 sm:py-3 ${colors.bg} rounded-r-lg`}>
                             <div className="flex justify-between items-center mb-2">
-                              <h4 className="font-semibold text-gray-900">{item.label}</h4>
+                              <h4 className="text-sm sm:text-base font-semibold text-gray-900">{item.label}</h4>
                               <div className="text-right">
-                                <span className={`text-xl font-bold ${colors.text}`}>
+                                <span className={`text-base sm:text-xl font-bold ${colors.text}`}>
                                   {avgScore.toFixed(1)}
                                 </span>
-                                <span className="text-sm text-gray-500 ml-1">
+                                <span className="text-xs sm:text-sm text-gray-500 ml-1">
                                   / {item.max}点
                                 </span>
                               </div>
                             </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                            <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2 mb-2 sm:mb-3">
                               <div
-                                className={`${colors.progressBg} h-2 rounded-full transition-all`}
+                                className={`${colors.progressBg} h-1.5 sm:h-2 rounded-full transition-all`}
                                 style={{ width: `${(avgScore / item.max) * 100}%` }}
                               />
                             </div>
 
                             {/* 各管理者のスコア表示 */}
-                            <div className="grid grid-cols-3 gap-2 mb-3">
+                            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mb-2 sm:mb-3">
                               {allAdminScores.map((adminScore, idx) => (
-                                <div key={idx} className={`bg-white rounded px-2 py-1 text-center border ${colors.border.replace('border-', 'border-').replace('-500', '-200')}`}>
-                                  <p className="text-[10px] text-gray-600">{adminScore.admin}</p>
-                                  <p className={`text-sm font-bold ${colors.text}`}>{adminScore.score}点</p>
+                                <div key={idx} className={`bg-white rounded px-1.5 sm:px-2 py-1 text-center border ${colors.border.replace('border-', 'border-').replace('-500', '-200')}`}>
+                                  <p className="text-[9px] sm:text-[10px] text-gray-600">{adminScore.admin}</p>
+                                  <p className={`text-xs sm:text-sm font-bold ${colors.text}`}>{adminScore.score}点</p>
                                 </div>
                               ))}
                             </div>
 
                             {/* コメント表示 */}
                             {allAdminScores.some(s => s.comment) && (
-                              <div className="mt-3 space-y-2">
-                                <p className="text-xs font-medium text-gray-600 flex items-center gap-1">
-                                  <MessageSquare className="h-3 w-3" />
+                              <div className="mt-2 sm:mt-3 space-y-1.5 sm:space-y-2">
+                                <p className="text-[10px] sm:text-xs font-medium text-gray-600 flex items-center gap-1">
+                                  <MessageSquare className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                                   管理者からのコメント ({allAdminScores.filter(s => s.comment).length}件)
                                 </p>
                                 {allAdminScores.map((adminScore, idx) => (
                                   adminScore.comment && (
-                                    <div key={idx} className={`bg-white rounded-lg p-3 border-l-4 ${colors.border.replace('-500', '-400')} shadow-sm`}>
-                                      <p className={`text-xs font-semibold ${colors.text.replace('-700', '-800')} mb-1`}>
+                                    <div key={idx} className={`bg-white rounded-lg p-2 sm:p-3 border-l-4 ${colors.border.replace('-500', '-400')} shadow-sm`}>
+                                      <p className={`text-[10px] sm:text-xs font-semibold ${colors.text.replace('-700', '-800')} mb-1`}>
                                         {adminScore.admin} （{adminScore.score}点）
                                       </p>
-                                      <p className="text-sm text-gray-700 leading-relaxed">{adminScore.comment}</p>
+                                      <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">{adminScore.comment}</p>
                                     </div>
                                   )
                                 ))}
@@ -574,12 +590,12 @@ export default async function MyEvaluationPage({
                     if (categoryItems.length === 0) return null
 
                     return (
-                      <Card key={categoryKey}>
-                        <CardHeader>
-                          <CardTitle className="text-lg">{getCategoryName(categoryKey, categoryMasters)}</CardTitle>
+                      <Card key={categoryKey} className="shadow-sm">
+                        <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
+                          <CardTitle className="text-base sm:text-lg">{getCategoryName(categoryKey, categoryMasters)}</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                          <div className="space-y-6">
+                        <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+                          <div className="space-y-4 sm:space-y-6">
                             {categoryItems.map((item) => {
                               const allAdminScores: { admin: string; score: number; comment: string | null }[] = []
 
@@ -603,47 +619,47 @@ export default async function MyEvaluationPage({
                                 : 0
 
                               return (
-                                <div key={item.key} className={`border-l-4 ${colors.border} pl-4 py-3 ${colors.bg} rounded-r-lg`}>
+                                <div key={item.key} className={`border-l-4 ${colors.border} pl-3 sm:pl-4 py-2 sm:py-3 ${colors.bg} rounded-r-lg`}>
                                   <div className="flex justify-between items-center mb-2">
-                                    <h4 className="font-semibold text-gray-900">{item.label}</h4>
+                                    <h4 className="text-sm sm:text-base font-semibold text-gray-900">{item.label}</h4>
                                     <div className="text-right">
-                                      <span className={`text-xl font-bold ${colors.text}`}>
+                                      <span className={`text-base sm:text-xl font-bold ${colors.text}`}>
                                         {avgScore.toFixed(1)}
                                       </span>
-                                      <span className="text-sm text-gray-500 ml-1">
+                                      <span className="text-xs sm:text-sm text-gray-500 ml-1">
                                         / {item.max}点
                                       </span>
                                     </div>
                                   </div>
-                                  <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                                  <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2 mb-2 sm:mb-3">
                                     <div
-                                      className={`${colors.progressBg} h-2 rounded-full transition-all`}
+                                      className={`${colors.progressBg} h-1.5 sm:h-2 rounded-full transition-all`}
                                       style={{ width: `${(avgScore / item.max) * 100}%` }}
                                     />
                                   </div>
 
-                                  <div className="grid grid-cols-3 gap-2 mb-3">
+                                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mb-2 sm:mb-3">
                                     {allAdminScores.map((adminScore, idx) => (
-                                      <div key={idx} className={`bg-white rounded px-2 py-1 text-center border ${colors.border.replace('border-', 'border-').replace('-500', '-200')}`}>
-                                        <p className="text-[10px] text-gray-600">{adminScore.admin}</p>
-                                        <p className={`text-sm font-bold ${colors.text}`}>{adminScore.score}点</p>
+                                      <div key={idx} className={`bg-white rounded px-1.5 sm:px-2 py-1 text-center border ${colors.border.replace('border-', 'border-').replace('-500', '-200')}`}>
+                                        <p className="text-[9px] sm:text-[10px] text-gray-600 truncate">{adminScore.admin}</p>
+                                        <p className={`text-xs sm:text-sm font-bold ${colors.text}`}>{adminScore.score}点</p>
                                       </div>
                                     ))}
                                   </div>
 
                                   {allAdminScores.some(s => s.comment) && (
-                                    <div className="mt-3 space-y-2">
-                                      <p className="text-xs font-medium text-gray-600 flex items-center gap-1">
-                                        <MessageSquare className="h-3 w-3" />
+                                    <div className="mt-2 sm:mt-3 space-y-1.5 sm:space-y-2">
+                                      <p className="text-[10px] sm:text-xs font-medium text-gray-600 flex items-center gap-1">
+                                        <MessageSquare className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                                         管理者からのコメント ({allAdminScores.filter(s => s.comment).length}件)
                                       </p>
                                       {allAdminScores.map((adminScore, idx) => (
                                         adminScore.comment && (
-                                          <div key={idx} className={`bg-white rounded-lg p-3 border-l-4 ${colors.border.replace('-500', '-400')} shadow-sm`}>
-                                            <p className={`text-xs font-semibold ${colors.text.replace('-700', '-800')} mb-1`}>
+                                          <div key={idx} className={`bg-white rounded-lg p-2 sm:p-3 border-l-4 ${colors.border.replace('-500', '-400')} shadow-sm`}>
+                                            <p className={`text-[10px] sm:text-xs font-semibold ${colors.text.replace('-700', '-800')} mb-1`}>
                                               {adminScore.admin} （{adminScore.score}点）
                                             </p>
-                                            <p className="text-sm text-gray-700 leading-relaxed">{adminScore.comment}</p>
+                                            <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">{adminScore.comment}</p>
                                           </div>
                                         )
                                       ))}
@@ -728,28 +744,28 @@ export default async function MyEvaluationPage({
                 return (
                   <>
                     {/* 総評サマリー */}
-                    <Card className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
-                      <CardHeader>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          <Award className="h-5 w-5 text-blue-600" />
+                    <Card className="mb-4 sm:mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-sm">
+                      <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
+                        <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                          <Award className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                           総合フィードバック
                         </CardTitle>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                         {/* 全体の平均スコア表示 */}
-                        <div className="mb-6 p-4 bg-white rounded-lg border-2 border-blue-300 text-center">
-                          <p className="text-sm text-gray-600 mb-2">総合平均スコア</p>
-                          <p className="text-4xl font-bold text-blue-600">
+                        <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-white rounded-lg border-2 border-blue-300 text-center">
+                          <p className="text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">総合平均スコア</p>
+                          <p className="text-3xl sm:text-4xl font-bold text-blue-600">
                             {overallAvg.toFixed(1)}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">全評価項目の平均</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 mt-1">全評価項目の平均</p>
                         </div>
 
-                        <p className="text-sm text-gray-700 leading-relaxed mb-4">
+                        <p className="text-xs sm:text-sm text-gray-700 leading-relaxed mb-3 sm:mb-4">
                           {generateSummary()}
                         </p>
 
-                        <div className="grid grid-cols-3 gap-4 mt-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 mt-3 sm:mt-4">
                           {Object.keys(categoryScores).map((categoryKey) => {
                             const colors = getCategoryColor(categoryKey)
                             const categoryName = getCategoryName(categoryKey, categoryMasters)
@@ -757,13 +773,13 @@ export default async function MyEvaluationPage({
                             const commentCount = allCommentsData[categoryKey]?.length || 0
 
                             return (
-                              <div key={categoryKey} className={`bg-white rounded-lg p-3 text-center border ${colors.border.replace('-500', '-200')}`}>
-                                <p className="text-xs text-gray-600 mb-1">{categoryName}</p>
-                                <p className={`text-2xl font-bold ${colors.text.replace('-700', '-600')}`}>
+                              <div key={categoryKey} className={`bg-white rounded-lg p-2.5 sm:p-3 text-center border ${colors.border.replace('-500', '-200')}`}>
+                                <p className="text-[10px] sm:text-xs text-gray-600 mb-1">{categoryName}</p>
+                                <p className={`text-xl sm:text-2xl font-bold ${colors.text.replace('-700', '-600')}`}>
                                   {avgScore.toFixed(1)}
                                 </p>
-                                <p className="text-xs text-gray-500">平均点</p>
-                                <p className="text-xs text-gray-400 mt-1">
+                                <p className="text-[10px] sm:text-xs text-gray-500">平均点</p>
+                                <p className="text-[10px] sm:text-xs text-gray-400 mt-1">
                                   {commentCount}件のコメント
                                 </p>
                               </div>
@@ -774,16 +790,16 @@ export default async function MyEvaluationPage({
                     </Card>
 
                     {/* 管理者別の詳細コメント */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>管理者別の詳細フィードバック</CardTitle>
-                        <CardDescription>
+                    <Card className="shadow-sm">
+                      <CardHeader className="px-4 sm:px-6 py-4 sm:py-6">
+                        <CardTitle className="text-base sm:text-lg">管理者別の詳細フィードバック</CardTitle>
+                        <CardDescription className="text-xs sm:text-sm">
                           各評価項目に対するフィードバックを管理者ごとに表示
                         </CardDescription>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                         {latestEvaluation.responses && latestEvaluation.responses.length > 0 ? (
-                          <div className="space-y-6">
+                          <div className="space-y-4 sm:space-y-6">
                       {latestEvaluation.responses.map((response: any, responseIdx: number) => {
                         // 各管理者のコメントを収集
                         const allComments: { category: string; itemName: string; comment: string }[] = []
@@ -812,18 +828,18 @@ export default async function MyEvaluationPage({
                         })
 
                         return (
-                          <div key={responseIdx} className="border border-gray-200 rounded-lg p-5 bg-white shadow-sm">
+                          <div key={responseIdx} className="border border-gray-200 rounded-lg p-3 sm:p-5 bg-white shadow-sm">
                             {/* 管理者ヘッダー */}
-                            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200">
-                              <MessageSquare className="h-5 w-5 text-blue-600" />
-                              <h3 className="text-lg font-bold text-gray-900">管理者{responseIdx + 1}</h3>
-                              <Badge variant="outline" className="ml-auto">
-                                {allComments.length}件のコメント
+                            <div className="flex items-center gap-2 mb-3 sm:mb-4 pb-2 sm:pb-3 border-b border-gray-200">
+                              <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+                              <h3 className="text-base sm:text-lg font-bold text-gray-900">管理者{responseIdx + 1}</h3>
+                              <Badge variant="outline" className="ml-auto text-[10px] sm:text-xs">
+                                {allComments.length}件
                               </Badge>
                             </div>
 
                             {/* カテゴリごとのコメント */}
-                            <div className="space-y-4">
+                            <div className="space-y-3 sm:space-y-4">
                               {Object.keys(groupedComments).map((categoryKey) => {
                                 const colors = getCategoryColor(categoryKey)
                                 const categoryName = getCategoryName(categoryKey, categoryMasters)
@@ -833,15 +849,15 @@ export default async function MyEvaluationPage({
 
                                 return (
                                   <div key={categoryKey}>
-                                    <h4 className={`text-sm font-semibold ${colors.text.replace('-700', '-800')} mb-2 flex items-center gap-1`}>
-                                      <span className={`inline-block w-3 h-3 ${colors.progressBg} rounded-full`}></span>
+                                    <h4 className={`text-xs sm:text-sm font-semibold ${colors.text.replace('-700', '-800')} mb-1.5 sm:mb-2 flex items-center gap-1`}>
+                                      <span className={`inline-block w-2 h-2 sm:w-3 sm:h-3 ${colors.progressBg} rounded-full`}></span>
                                       {categoryName}に関するコメント
                                     </h4>
-                                    <div className="space-y-2 pl-4">
+                                    <div className="space-y-1.5 sm:space-y-2 pl-3 sm:pl-4">
                                       {comments.map((c, idx) => (
-                                        <div key={idx} className="text-sm">
+                                        <div key={idx} className="text-xs sm:text-sm">
                                           <span className="font-medium text-gray-700">{c.itemName}:</span>
-                                          <span className="text-gray-600 ml-2">{c.comment}</span>
+                                          <span className="text-gray-600 ml-1 sm:ml-2">{c.comment}</span>
                                         </div>
                                       ))}
                                     </div>
