@@ -182,7 +182,9 @@ export default async function AdminEvaluationDetailPage({
     return categories
   }
 
-  const itemCategories = evaluation ? buildItemCategoriesFromEvaluation(evaluation) : {}
+  const itemCategories: Record<string, Array<{ key: string; label: string; max: number }>> = evaluation
+    ? buildItemCategoriesFromEvaluation(evaluation)
+    : {}
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
