@@ -137,16 +137,12 @@ export function useAuth() {
         throw new Error('この企業コードではログインできません')
       }
 
-      // ユーザー情報を直接セット（getUser()の重複呼び出しを削除）
-      setUser(userData)
-      setLoading(false)
+      // 5. ロールに応じてリダイレクト（完全なページリロードで高速化）
+      const redirectUrl = userData?.is_admin ? '/admin/dashboard' : '/dashboard'
 
-      // 5. ロールに応じてリダイレクト
-      if (userData?.is_admin) {
-        router.push('/admin/dashboard')
-      } else {
-        router.push('/dashboard')
-      }
+      // window.location.hrefを使って完全なページリロードを行う
+      // これにより、クライアントサイドルーティングのオーバーヘッドを回避
+      window.location.href = redirectUrl
 
       return { success: true }
     } catch (error: any) {
