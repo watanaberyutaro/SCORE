@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { redirect } from 'next/navigation'
 
 async function checkSystemConfiguration() {
   const supabase = await createSupabaseServerClient()
@@ -12,6 +13,16 @@ async function checkSystemConfiguration() {
     categories: { status: 'pending', data: null, message: '' },
     items: { status: 'pending', data: null, message: '' },
     rankSettings: { status: 'pending', data: null, message: '' },
+  }
+
+  if (!user) {
+    checks.categories.status = 'error'
+    checks.categories.message = 'ユーザー情報が取得できません'
+    checks.items.status = 'error'
+    checks.items.message = 'ユーザー情報が取得できません'
+    checks.rankSettings.status = 'error'
+    checks.rankSettings.message = 'ユーザー情報が取得できません'
+    return checks
   }
 
   // 評価カテゴリの確認
@@ -88,6 +99,11 @@ async function checkSystemConfiguration() {
 
 export default async function SystemCheckPage() {
   const user = await getCurrentUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
   const checks = await checkSystemConfiguration()
 
   const getStatusIcon = (status: string) => {
