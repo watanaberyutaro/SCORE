@@ -7,7 +7,7 @@ export interface CategoryMaster {
   id: string
   category_key: string
   category_label: string
-  display_order: number
+  display_order?: number
   description?: string
 }
 
@@ -53,7 +53,7 @@ export function getCategoryName(
  */
 export function getAllCategories(categories?: CategoryMaster[]): CategoryMaster[] {
   const categoryList = categories && categories.length > 0 ? categories : DEFAULT_CATEGORIES
-  return [...categoryList].sort((a, b) => a.display_order - b.display_order)
+  return [...categoryList].sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
 }
 
 /**
