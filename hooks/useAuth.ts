@@ -14,46 +14,19 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true
 
+    // 初回のユーザー情報取得
+    getUser()
+
     // 認証状態の変更を監視
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return
 
       if (session?.user) {
-        // ユーザー情報を取得（1回のみ）
-        try {
-          const { data: userData, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
-
-          if (mounted && !error && userData) {
-            setUser(userData)
-          }
-        } catch (error) {
-          // エラー時は何もしない
-        } finally {
-          if (mounted) {
-            setLoading(false)
-          }
-        }
+        getUser()
       } else {
-        if (mounted) {
-          setUser(null)
-          setLoading(false)
-        }
-      }
-    })
-
-    // 初回の認証状態を確認
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return
-
-      if (session?.user) {
-        // セッションがある場合、onAuthStateChangeが呼ばれるので何もしない
-      } else {
+        setUser(null)
         setLoading(false)
       }
     })
@@ -62,7 +35,8 @@ export function useAuth() {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [supabase])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function getUser() {
     try {
