@@ -3,24 +3,25 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Cell } from 'recharts'
 import { BarChart3, Activity, TrendingUp, Award, Target } from 'lucide-react'
+import { getCategoryName, getCategoryColor, type CategoryMaster } from '@/lib/utils/category-mapper'
 
 interface EvaluationChartsProps {
   evaluation: any
-  itemCategories: {
-    performance: Array<{ key: string; label: string; max: number }>
-    behavior: Array<{ key: string; label: string; max: number }>
-    growth: Array<{ key: string; label: string; max: number }>
-  }
+  itemCategories: any
+  categories?: CategoryMaster[]
 }
 
-export function EvaluationCharts({ evaluation, itemCategories }: EvaluationChartsProps) {
-  // カテゴリ別スコアの計算
+export function EvaluationCharts({ evaluation, itemCategories, categories }: EvaluationChartsProps) {
+  // カテゴリ別スコアの計算（動的に）
   const calculateCategoryScores = () => {
-    const categories = ['performance', 'behavior', 'growth'] as const
-    const result: { category: string; avgScore: number; maxScore: number; percentage: number }[] = []
+    const result: { category: string; categoryKey: string; avgScore: number; maxScore: number; percentage: number }[] = []
 
-    categories.forEach((category) => {
-      const items = itemCategories[category]
+    // 動的にカテゴリを処理
+    Object.keys(itemCategories).forEach((categoryKey) => {
+      const items = itemCategories[categoryKey]
+
+      if (!items || items.length === 0) return
+
       let totalScore = 0
       let totalMax = 0
       let count = 0
@@ -49,7 +50,8 @@ export function EvaluationCharts({ evaluation, itemCategories }: EvaluationChart
       const percentage = totalMax > 0 ? (totalScore / totalMax) * 100 : 0
 
       result.push({
-        category: category === 'performance' ? '成果評価' : category === 'behavior' ? '行動評価' : '成長評価',
+        category: getCategoryName(categoryKey, categories),
+        categoryKey: categoryKey,
         avgScore: parseFloat(totalScore.toFixed(1)),
         maxScore: totalMax,
         percentage: parseFloat(percentage.toFixed(1)),
@@ -61,11 +63,8 @@ export function EvaluationCharts({ evaluation, itemCategories }: EvaluationChart
 
   // レーダーチャート用のデータを作成（達成率で表示）
   const createRadarData = () => {
-    const allItems = [
-      ...itemCategories.performance,
-      ...itemCategories.behavior,
-      ...itemCategories.growth,
-    ]
+    // 全てのカテゴリから項目を動的に収集
+    const allItems = Object.values(itemCategories).flat()
 
     return allItems.map((item) => {
       const scores: number[] = []
@@ -100,11 +99,20 @@ export function EvaluationCharts({ evaluation, itemCategories }: EvaluationChart
   const radarData = createRadarData()
 
   // カテゴリごとの色を定義（指定された青緑系パレット）
-  const categoryColors = [
-    { from: '#017598', to: '#087ea2', icon: TrendingUp }, // 成果評価: ダークティール
-    { from: '#05a7be', to: '#18c4b8', icon: Award },      // 行動評価: ミディアムティール
-    { from: '#18c4b8', to: '#1ed7cd', icon: Target },     // 成長評価: ライトシアン
-  ]
+  const categoryColors = categoryData.map((cat) => {
+    const color = getCategoryColor(cat.categoryKey)
+    // デフォルトカテゴリには特定のアイコン、カスタムカテゴリにはデフォルトアイコン
+    const iconMap: Record<string, any> = {
+      performance: TrendingUp,
+      behavior: Award,
+      growth: Target,
+    }
+    return {
+      from: color.from,
+      to: color.to,
+      icon: iconMap[cat.categoryKey] || Activity, // カスタムカテゴリはActivityアイコン
+    }
+  })
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
