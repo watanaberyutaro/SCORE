@@ -153,26 +153,6 @@ export default async function EvaluationItemsPage() {
         <p className="mt-2 text-sm text-gray-600">
           評価基準と各項目の詳細説明
         </p>
-
-        {/* デバッグ情報 */}
-        <div className="mt-4 p-4 bg-gray-100 rounded text-xs">
-          <p className="font-bold mb-2">デバッグ情報:</p>
-          <p>現在のユーザーID: {user.id}</p>
-          <p>現在の会社ID: {user.company_id}</p>
-          <p>カテゴリマスター数: {categoryMasters.length}</p>
-          <p>評価項目数: {items.length}</p>
-          <p>ランク設定数: {rankSettings.length}</p>
-          <p>カテゴリキー: {Object.keys(itemsByCategory).join(', ')}</p>
-          {categoryMasters.length > 0 && (
-            <p>カテゴリマスター: {categoryMasters.map(c => c.category_key).join(', ')}</p>
-          )}
-          {itemsError && (
-            <p className="text-red-600 mt-2">評価項目エラー: {itemsError}</p>
-          )}
-          {rankError && (
-            <p className="text-red-600 mt-2">ランク設定エラー: {rankError}</p>
-          )}
-        </div>
       </div>
 
       {/* 動的カテゴリカード */}
