@@ -141,11 +141,10 @@ export default function RegisterUserPage() {
                 onChange={(e) => setCompanyCode(e.target.value.toUpperCase())}
                 required
                 disabled={loading}
-                maxLength={6}
-                className="uppercase tracking-widest font-mono"
+                  className="uppercase tracking-widest font-mono"
               />
               <p className="text-xs text-gray-500">
-                管理者から提供された6桁の企業コードを入力してください
+                管理者から提供された企業コードを入力してください
               </p>
             </div>
 
