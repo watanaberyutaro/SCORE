@@ -3,7 +3,7 @@ import { getCurrentUser } from '@/lib/auth/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { getRankColor } from '@/lib/utils/evaluation-calculator'
+import { getRankColor, RankSetting } from '@/lib/utils/evaluation-calculator'
 import { getRewardDisplay } from '@/lib/utils/evaluation-calculator'
 import { Award, TrendingUp, Users, MessageSquare } from 'lucide-react'
 import { redirect } from 'next/navigation'
@@ -12,14 +12,6 @@ import { EvaluationCharts } from '@/components/evaluation/evaluation-charts'
 import { MonthSelector } from '@/components/evaluation/month-selector'
 import { QuarterSelector } from '@/components/evaluation/quarter-selector'
 import { getCategoryName, type CategoryMaster } from '@/lib/utils/category-mapper'
-
-// ランク設定の型定義
-interface RankSetting {
-  rank_name: string
-  min_score: number
-  amount: number
-  display_order?: number
-}
 
 async function getMyEvaluations(userId: string) {
   const supabase = await createSupabaseServerClient()
@@ -87,7 +79,7 @@ async function getRankSettings(companyId: string): Promise<RankSetting[]> {
 
   const { data: rankSettings } = await supabase
     .from('rank_settings')
-    .select('rank_name, min_score, amount')
+    .select('rank_name, min_score, amount, display_order')
     .eq('company_id', companyId)
     .order('min_score', { ascending: false })
 
