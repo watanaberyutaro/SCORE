@@ -8,7 +8,8 @@ import { Award, TrendingUp, MessageSquare, ArrowLeft } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { EvaluationCharts } from '@/components/evaluation/evaluation-charts'
 import Link from 'next/link'
-import { getRankColor, calculateReward, getRewardDisplay, type RankSetting } from '@/lib/utils/evaluation-calculator'
+import { getRankColor, calculateReward, getRewardDisplay } from '@/lib/utils/evaluation-calculator'
+import type { RankSetting } from '@/lib/utils/evaluation-calculator'
 import { getCategoryName, type CategoryMaster } from '@/lib/utils/category-mapper'
 
 async function getEvaluationDetail(staffId: string, year: number, month: number, adminCompanyId: string) {
