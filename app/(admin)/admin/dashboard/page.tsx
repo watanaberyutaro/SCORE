@@ -94,7 +94,7 @@ async function getDashboardData() {
   ])
 
   // 同じ企業の評価のみフィルタ
-  const filteredEvaluations = currentMonthEvaluations?.filter(e => e.staff?.company_id === currentUser.company_id)
+  const filteredEvaluations = currentMonthEvaluations?.filter((e: any) => e.staff?.company_id === currentUser.company_id)
 
   const evaluations = filteredEvaluations || []
 
