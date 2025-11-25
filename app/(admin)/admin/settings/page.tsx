@@ -14,16 +14,30 @@ import { EvaluationItemMaster, EvaluationCycle, EvaluationCategoryMaster } from 
 import { calculatePeriod, getAllPeriods, getPeriodInfo } from '@/lib/utils/period-calculator'
 
 type NewCycle = Omit<EvaluationCycle, 'id' | 'created_at' | 'company_id'>
-type NewItem = Omit<EvaluationItemMaster, 'id' | 'created_at'>
-type NewCategory = Omit<EvaluationCategoryMaster, 'id' | 'created_at' | 'updated_at'>
+type NewItem = Omit<EvaluationItemMaster, 'id' | 'created_at' | 'company_id'>
+type NewCategory = Omit<EvaluationCategoryMaster, 'id' | 'created_at' | 'updated_at' | 'company_id'>
+
+interface RankSetting {
+  id: string
+  company_id: string
+  rank_name: string
+  min_score: number
+  amount: number
+  display_order: number
+  created_at: string
+  updated_at: string
+}
+
+type NewRank = Omit<RankSetting, 'id' | 'created_at' | 'updated_at' | 'company_id'>
 
 export default function AdminSettingsPage() {
   const [cycles, setCycles] = useState<EvaluationCycle[]>([])
   const [items, setItems] = useState<EvaluationItemMaster[]>([])
   const [categories, setCategories] = useState<EvaluationCategoryMaster[]>([])
+  const [ranks, setRanks] = useState<RankSetting[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'cycles' | 'evaluation'>('cycles')
+  const [activeTab, setActiveTab] = useState<'cycles' | 'evaluation' | 'ranks'>('cycles')
 
   // Company info state
   const [companyId, setCompanyId] = useState<string>('')
@@ -34,6 +48,10 @@ export default function AdminSettingsPage() {
   const [availablePeriods, setAvailablePeriods] = useState<any[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState<number>(1)
   const [codeCopied, setCodeCopied] = useState(false)
+
+  // Confirmation dialog state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null)
 
   // Cycle form state
   const [showCycleForm, setShowCycleForm] = useState(false)
@@ -71,6 +89,16 @@ export default function AdminSettingsPage() {
     is_active: true
   })
 
+  // Rank form state
+  const [showRankForm, setShowRankForm] = useState(false)
+  const [editingRank, setEditingRank] = useState<RankSetting | null>(null)
+  const [rankForm, setRankForm] = useState<NewRank>({
+    rank_name: '',
+    min_score: 0,
+    amount: 0,
+    display_order: 0
+  })
+
   const supabase = createClient()
 
   useEffect(() => {
@@ -93,7 +121,7 @@ export default function AdminSettingsPage() {
 
       if (!currentUser) throw new Error('ユーザー情報が見つかりません')
 
-      const [companyRes, cyclesRes, itemsRes, categoriesRes] = await Promise.all([
+      const [companyRes, cyclesRes, itemsRes, categoriesRes, ranksRes] = await Promise.all([
         supabase
           .from('companies')
           .select('*')
@@ -113,13 +141,19 @@ export default function AdminSettingsPage() {
           .from('evaluation_categories')
           .select('*')
           .eq('company_id', currentUser.company_id)
-          .order('display_order')
+          .order('display_order'),
+        supabase
+          .from('rank_settings')
+          .select('*')
+          .eq('company_id', currentUser.company_id)
+          .order('display_order', { ascending: false })
       ])
 
       if (companyRes.error) throw companyRes.error
       if (cyclesRes.error) throw cyclesRes.error
       if (itemsRes.error) throw itemsRes.error
       if (categoriesRes.error) throw categoriesRes.error
+      if (ranksRes.error) throw ranksRes.error
 
       // Set company info
       setCompanyId(companyRes.data.id)
@@ -140,6 +174,7 @@ export default function AdminSettingsPage() {
       setCycles(cyclesRes.data || [])
       setItems(itemsRes.data || [])
       setCategories(categoriesRes.data || [])
+      setRanks(ranksRes.data || [])
     } catch (err: any) {
       console.error('Error fetching data:', err)
       setError(err.message)
@@ -308,12 +343,23 @@ export default function AdminSettingsPage() {
 
   // Item CRUD operations
   async function handleSaveItem() {
+    console.log('handleSaveItem called')
+    console.log('editingItem:', editingItem)
+    console.log('itemForm:', itemForm)
+    console.log('companyId:', companyId)
+
     try {
       setError('')
 
+      if (!companyId) {
+        console.error('companyIdが設定されていません')
+        throw new Error('企業IDが設定されていません')
+      }
+
       if (editingItem) {
+        console.log('Updating existing item:', editingItem.id)
         // 編集時は company_id を変更しない
-        const { error } = await supabase
+        const { error, data } = await supabase
           .from('evaluation_items_master')
           .update({
             category: itemForm.category,
@@ -324,38 +370,101 @@ export default function AdminSettingsPage() {
           })
           .eq('id', editingItem.id)
           .eq('company_id', companyId) // 自社のデータのみ更新
+          .select()
 
-        if (error) throw error
+        console.log('Update result:', { error, data })
+
+        if (error) {
+          console.error('Supabase update error:', error)
+          throw error
+        }
+
+        if (!data || data.length === 0) {
+          console.warn('更新対象が見つかりませんでした')
+          throw new Error('更新対象の評価項目が見つかりませんでした。既に削除されているか、権限がない可能性があります。')
+        }
       } else {
-        const { error } = await supabase
+        console.log('Creating new item')
+        const { error, data } = await supabase
           .from('evaluation_items_master')
           .insert([{ ...itemForm, company_id: companyId }])
+          .select()
 
-        if (error) throw error
+        console.log('Insert result:', { error, data })
+
+        if (error) {
+          console.error('Supabase insert error:', error)
+          throw error
+        }
       }
 
+      console.log('保存成功、データを再取得します')
       await fetchData()
       resetItemForm()
+      alert('保存しました')
     } catch (err: any) {
+      console.error('Error saving item:', err)
       setError(err.message)
+      alert(`エラー: ${err.message}`)
     }
   }
 
-  async function handleDeleteItem(id: string) {
-    if (!confirm('この評価項目を削除してもよろしいですか？')) return
+  function handleDeleteItem(id: string) {
+    console.log('handleDeleteItem called with id:', id)
+    setItemToDelete(id)
+    setShowDeleteConfirm(true)
+  }
+
+  async function confirmDeleteItem() {
+    if (!itemToDelete) return
+
+    console.log('confirmDeleteItem called with id:', itemToDelete)
+    console.log('companyId:', companyId)
 
     try {
-      const { error } = await supabase
+      setError('')
+      setShowDeleteConfirm(false)
+
+      if (!companyId) {
+        console.error('companyIdが設定されていません')
+        throw new Error('企業IDが設定されていません')
+      }
+
+      console.log('Deleting item:', itemToDelete, 'for company:', companyId)
+
+      const { error, data } = await supabase
         .from('evaluation_items_master')
         .delete()
-        .eq('id', id)
-        .eq('company_id', companyId) // 自社のデータのみ削除
+        .eq('id', itemToDelete)
+        .eq('company_id', companyId)
+        .select()
 
-      if (error) throw error
+      console.log('Delete result:', { error, data })
+
+      if (error) {
+        console.error('Supabase delete error:', error)
+        throw error
+      }
+
+      if (!data || data.length === 0) {
+        console.warn('削除対象が見つかりませんでした')
+        throw new Error('削除対象の評価項目が見つかりませんでした。既に削除されているか、権限がない可能性があります。')
+      }
+
+      console.log('削除成功、データを再取得します')
       await fetchData()
+      setError('')
     } catch (err: any) {
+      console.error('Error deleting item:', err)
       setError(err.message)
+    } finally {
+      setItemToDelete(null)
     }
+  }
+
+  function cancelDeleteItem() {
+    setShowDeleteConfirm(false)
+    setItemToDelete(null)
   }
 
   function openItemForm() {
@@ -484,6 +593,89 @@ export default function AdminSettingsPage() {
     })
   }
 
+  // Rank CRUD functions
+  async function handleSaveRank() {
+    try {
+      if (!rankForm.rank_name.trim()) {
+        throw new Error('ランク名を入力してください')
+      }
+
+      if (editingRank) {
+        // Update existing rank
+        const { error } = await supabase
+          .from('rank_settings')
+          .update({
+            rank_name: rankForm.rank_name,
+            min_score: rankForm.min_score,
+            amount: rankForm.amount,
+            display_order: rankForm.display_order,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingRank.id)
+          .eq('company_id', companyId)
+
+        if (error) throw error
+      } else {
+        // Create new rank
+        const { error } = await supabase
+          .from('rank_settings')
+          .insert({
+            company_id: companyId,
+            rank_name: rankForm.rank_name,
+            min_score: rankForm.min_score,
+            amount: rankForm.amount,
+            display_order: rankForm.display_order
+          })
+
+        if (error) throw error
+      }
+
+      await fetchData()
+      resetRankForm()
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDeleteRank(id: string) {
+    if (!confirm('このランク設定を削除してもよろしいですか？')) return
+
+    try {
+      const { error } = await supabase
+        .from('rank_settings')
+        .delete()
+        .eq('id', id)
+        .eq('company_id', companyId)
+
+      if (error) throw error
+      await fetchData()
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  function resetRankForm() {
+    setShowRankForm(false)
+    setEditingRank(null)
+    setRankForm({
+      rank_name: '',
+      min_score: 0,
+      amount: 0,
+      display_order: 0
+    })
+  }
+
+  function handleEditRank(rank: RankSetting) {
+    setEditingRank(rank)
+    setRankForm({
+      rank_name: rank.rank_name,
+      min_score: rank.min_score,
+      amount: rank.amount || 0,
+      display_order: rank.display_order
+    })
+    setShowRankForm(true)
+  }
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
       planning: 'bg-yellow-100 text-yellow-800',
@@ -553,6 +745,16 @@ export default function AdminSettingsPage() {
           onClick={() => setActiveTab('evaluation')}
         >
           評価設定
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'ranks'
+              ? 'border-b-2 border-blue-500 text-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('ranks')}
+        >
+          ランク設定
         </button>
       </div>
 
@@ -1088,6 +1290,9 @@ export default function AdminSettingsPage() {
             )}
 
             <div className="space-y-2">
+              {items.length === 0 && (
+                <p className="text-gray-500 text-center py-4">評価項目がありません</p>
+              )}
               {items.map((item) => (
                 <div
                   key={item.id}
@@ -1109,7 +1314,13 @@ export default function AdminSettingsPage() {
                       size="sm"
                       onClick={() => {
                         setEditingItem(item)
-                        setItemForm(item)
+                        setItemForm({
+                          category: item.category,
+                          item_name: item.item_name,
+                          min_score: item.min_score,
+                          max_score: item.max_score,
+                          description: item.description
+                        })
                         setShowItemForm(true)
                       }}
                     >
@@ -1128,6 +1339,216 @@ export default function AdminSettingsPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
+      )}
+
+      {/* Ranks Tab */}
+      {activeTab === 'ranks' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>ランク設定</CardTitle>
+                  <CardDescription>評価ランクの基準を設定します</CardDescription>
+                </div>
+                <Button onClick={() => setShowRankForm(true)} size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  ランク追加
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {showRankForm && (
+                <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+                  <h3 className="font-medium mb-4">
+                    {editingRank ? 'ランク編集' : '新規ランク追加'}
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="rank_name">ランク名 *</Label>
+                        <Input
+                          id="rank_name"
+                          value={rankForm.rank_name}
+                          onChange={(e) => setRankForm({ ...rankForm, rank_name: e.target.value })}
+                          placeholder="例: SS, S, A, B, C"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="min_score">最低スコア *</Label>
+                        <Input
+                          id="min_score"
+                          type="number"
+                          value={rankForm.min_score}
+                          onChange={(e) => setRankForm({ ...rankForm, min_score: parseInt(e.target.value) || 0 })}
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="amount">金額（円）</Label>
+                        <Input
+                          id="amount"
+                          type="number"
+                          value={rankForm.amount}
+                          onChange={(e) => setRankForm({ ...rankForm, amount: parseInt(e.target.value) || 0 })}
+                          placeholder="0"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">このランクの報酬額</p>
+                      </div>
+                      <div>
+                        <Label htmlFor="display_order">表示順序</Label>
+                        <Input
+                          id="display_order"
+                          type="number"
+                          value={rankForm.display_order}
+                          onChange={(e) => setRankForm({ ...rankForm, display_order: parseInt(e.target.value) || 0 })}
+                          placeholder="0"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">大きい数字ほど上位に表示されます</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <Button onClick={handleSaveRank}>
+                      {editingRank ? '更新' : '追加'}
+                    </Button>
+                    <Button variant="outline" onClick={resetRankForm}>
+                      キャンセル
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {ranks.length > 0 ? (
+                <div className="space-y-2">
+                  {ranks.map((rank) => (
+                    <div
+                      key={rank.id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <Badge className="text-lg px-3 py-1">{rank.rank_name}</Badge>
+                          <span className="text-sm text-gray-600">
+                            {rank.min_score}点以上
+                          </span>
+                          {rank.amount > 0 && (
+                            <span className="text-sm font-semibold text-green-600">
+                              ¥{rank.amount.toLocaleString()}
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400">
+                            (表示順序: {rank.display_order})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditRank(rank)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteRank(rank.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-4">ランク設定がありません</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>デフォルトランク基準（参考）</CardTitle>
+              <CardDescription>
+                カスタムランクを設定しない場合、以下の基準が自動的に適用されます
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {[
+                  { rank: 'SS', minScore: 95, amount: 100000, color: 'bg-purple-500' },
+                  { rank: 'S', minScore: 90, amount: 80000, color: 'bg-red-500' },
+                  { rank: 'A+', minScore: 85, amount: 70000, color: 'bg-orange-500' },
+                  { rank: 'A', minScore: 80, amount: 60000, color: 'bg-yellow-500' },
+                  { rank: 'A-', minScore: 75, amount: 50000, color: 'bg-lime-500' },
+                  { rank: 'B', minScore: 60, amount: 40000, color: 'bg-green-500' },
+                  { rank: 'C', minScore: 40, amount: 30000, color: 'bg-blue-500' },
+                  { rank: 'D', minScore: 0, amount: 20000, color: 'bg-gray-500' },
+                ].map((item) => (
+                  <div
+                    key={item.rank}
+                    className="flex items-center justify-between p-3 border rounded-lg bg-gray-50"
+                  >
+                    <div className="flex items-center gap-3 flex-1">
+                      <Badge className={`text-white ${item.color} text-lg px-3 py-1`}>
+                        {item.rank}
+                      </Badge>
+                      <span className="text-sm text-gray-700 font-medium">
+                        {item.rank === 'D' ? `${item.minScore}〜39点` : `${item.minScore}点以上`}
+                      </span>
+                    </div>
+                    <span className="text-sm font-semibold text-green-600">
+                      ¥{item.amount.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Alert>
+            <AlertDescription>
+              <strong>ランク設定について:</strong>
+              <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+                <li>各ランクの最低スコアを設定します</li>
+                <li>評価スコアがこの基準を満たすと、そのランクが付与されます</li>
+                <li>表示順序が大きいほど上位のランクとして表示されます</li>
+                <li>カスタムランクを設定すると、デフォルトランクの代わりに使用されます</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">確認</h3>
+            <p className="text-gray-700 mb-6">
+              この評価項目を削除してもよろしいですか？
+              <br />
+              この操作は取り消せません。
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="outline"
+                onClick={cancelDeleteItem}
+              >
+                キャンセル
+              </Button>
+              <Button
+                onClick={confirmDeleteItem}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                削除する
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

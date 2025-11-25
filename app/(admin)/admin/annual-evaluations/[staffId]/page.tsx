@@ -474,7 +474,7 @@ export default async function StaffAnnualEvaluationDetailPage({
                   </div>
                   <div className="ml-4">
                     {monthData.hasEvaluation ? (
-                      <Link href={`/admin/staff-evaluations/${params.staffId}?id=${monthData.evaluation.id}`}>
+                      <Link href={`/admin/evaluation-detail/${params.staffId}?year=${monthData.year}&month=${monthData.month}`}>
                         <Button variant="outline" size="sm" className="border-2" style={{ borderColor: '#6366f1', color: '#6366f1' }}>
                           <Eye className="h-4 w-4 mr-1" />
                           詳細を見る
@@ -544,7 +544,7 @@ export default async function StaffAnnualEvaluationDetailPage({
                 )}
 
                 {monthData.hasEvaluation && (
-                  <Link href={`/admin/staff-evaluations/${params.staffId}?id=${monthData.evaluation.id}`}>
+                  <Link href={`/admin/evaluation-detail/${params.staffId}?year=${monthData.year}&month=${monthData.month}`}>
                     <Button variant="outline" size="sm" className="w-full border-2" style={{ borderColor: '#6366f1', color: '#6366f1' }}>
                       <Eye className="h-4 w-4 mr-1" />
                       詳細を見る

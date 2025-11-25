@@ -57,12 +57,12 @@ export default function LoginPage() {
               <Input
                 id="companyCode"
                 type="text"
-                placeholder="ABC123"
+                placeholder="企業コードを入力"
                 value={companyCode}
                 onChange={(e) => setCompanyCode(e.target.value.toUpperCase())}
                 required
                 disabled={loading}
-                className="h-11"
+                className="h-11 placeholder:text-gray-400"
               />
             </div>
 
@@ -71,12 +71,12 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="example@company.com"
+                placeholder="メールアドレスを入力"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={loading}
-                className="h-11"
+                className="h-11 placeholder:text-gray-400"
               />
             </div>
 
@@ -85,12 +85,12 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="パスワードを入力"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={loading}
-                className="h-11"
+                className="h-11 placeholder:text-gray-400"
               />
             </div>
 

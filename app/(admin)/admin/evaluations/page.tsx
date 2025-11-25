@@ -368,7 +368,11 @@ export default function AdminEvaluationsPage() {
                       <TableCell>
                         <div className="flex gap-2">
                           <Link
-                            href={`/admin/staff-evaluations/${s.id}`}
+                            href={
+                              selectedPeriod && selectedPeriodMonth !== 'all'
+                                ? `/admin/evaluation-detail/${s.id}?${selectedPeriodMonth.split('-').map((v, i) => i === 0 ? `year=${v}` : `month=${parseInt(v)}`).join('&')}`
+                                : `/admin/evaluation-detail/${s.id}?year=${selectedYear}&month=${selectedMonth}`
+                            }
                           >
                             <Button
                               variant="outline"
@@ -449,7 +453,11 @@ export default function AdminEvaluationsPage() {
                   {/* アクション */}
                   <div className="grid grid-cols-2 gap-2">
                     <Link
-                      href={`/admin/staff-evaluations/${s.id}`}
+                      href={
+                        selectedPeriod && selectedPeriodMonth !== 'all'
+                          ? `/admin/evaluation-detail/${s.id}?${selectedPeriodMonth.split('-').map((v, i) => i === 0 ? `year=${v}` : `month=${parseInt(v)}`).join('&')}`
+                          : `/admin/evaluation-detail/${s.id}?year=${selectedYear}&month=${selectedMonth}`
+                      }
                       className="block"
                     >
                       <Button
