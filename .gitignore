@@ -34,3 +34,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# backup files and directories
+*\ 2/
+*\ 2.*
+*.bak
+database/
+*.sql
