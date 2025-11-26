@@ -60,14 +60,15 @@ async function getDashboardData() {
       .eq('company_id', currentUser.company_id)
       .order('full_name'),
 
-    // 今月の評価データを取得（同じ企業のみ）
+    // 今月の評価データを取得（同じ企業のみ、評価レスポンスも含む）
     supabase
       .from('evaluations')
       .select(`
         id,
         staff_id,
         status,
-        staff:users!evaluations_staff_id_fkey(id, full_name, department, position, email, company_id)
+        staff:users!evaluations_staff_id_fkey(id, full_name, department, position, email, company_id),
+        responses:evaluation_responses(id, admin_id, submitted_at)
       `)
       .eq('evaluation_year', currentYear)
       .eq('evaluation_month', currentMonth),
@@ -98,14 +99,39 @@ async function getDashboardData() {
 
   const evaluations = filteredEvaluations || []
 
-  // 完了した評価のみを抽出
-  const completedUsers = evaluations.filter(e => e.status === 'completed')
+  // 現在のユーザー（管理者）が評価を提出済みのスタッフを抽出
+  const completedUsers = (allStaff || [])
+    .map(staff => {
+      const evaluation = evaluations.find(e => e.staff_id === staff.id)
+      // 現在のユーザーのレスポンスを探す
+      const myResponse = evaluation?.responses?.find((r: any) => r.admin_id === user.id)
+      const isSubmitted = myResponse?.submitted_at !== null && myResponse?.submitted_at !== undefined
 
-  // 未完了のスタッフを抽出（評価が存在しないスタッフ）
-  const pendingUsers = (allStaff || []).filter(staff => {
-    const hasEvaluation = evaluations.some(e => e.staff_id === staff.id)
-    return !hasEvaluation
-  })
+      return {
+        ...staff,
+        ...evaluation, // 評価データを直接展開（rank, total_scoreなどにアクセス可能）
+        staff_id: staff.id, // 上書き防止
+        isSubmitted
+      }
+    })
+    .filter(item => item.isSubmitted)
+
+  // 現在のユーザー（管理者）が未提出のスタッフを抽出
+  const pendingUsers = (allStaff || [])
+    .map(staff => {
+      const evaluation = evaluations.find(e => e.staff_id === staff.id)
+      // 現在のユーザーのレスポンスを探す
+      const myResponse = evaluation?.responses?.find((r: any) => r.admin_id === user.id)
+      const isSubmitted = myResponse?.submitted_at !== null && myResponse?.submitted_at !== undefined
+
+      return {
+        ...staff,
+        ...evaluation, // 評価データを直接展開
+        staff_id: staff.id, // 上書き防止
+        isSubmitted
+      }
+    })
+    .filter(item => !item.isSubmitted)
 
   // 面談前の目標（interview_status が pending または scheduled）
   const pendingInterviews = (allGoals || []).filter(g => g.interview_status === 'pending' || g.interview_status === 'scheduled')
