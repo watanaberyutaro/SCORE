@@ -296,61 +296,21 @@ export async function POST(
 
     const adminCount = adminUsers?.length || 0
 
-    // 全管理者が提出済みか確認
+    // 全ての回答を取得して提出済みかチェック（1回のクエリで完結）
     const { data: allResponses } = await supabase
       .from('evaluation_responses')
-      .select('id, submitted_at')
+      .select('id, total_score, submitted_at')
       .eq('evaluation_id', evaluation!.id)
 
-    // 提出済み（下書きでない）回答のみをカウント
+    // 提出済み（下書きでない）回答のみをフィルタ
     const submittedResponses = allResponses?.filter((r) => r.submitted_at !== null) || []
 
-    const allSubmitted =
-      submittedResponses &&
-      adminCount &&
-      submittedResponses.length === adminCount
+    const allSubmitted = submittedResponses && adminCount && submittedResponses.length === adminCount
 
     if (allSubmitted) {
-      // 全ての回答とその評価項目を取得
-      const { data: responsesWithItems } = await supabase
-        .from('evaluation_responses')
-        .select('total_score, items:evaluation_items(*)')
-        .eq('evaluation_id', evaluation!.id)
-
-      // 平均スコアを計算
-      const totalScores = responsesWithItems?.map((r) => r.total_score || 0) || []
+      // 平均スコアを計算（提出済み回答のみ）
+      const totalScores = submittedResponses.map((r) => r.total_score || 0)
       const averageScore = totalScores.reduce((sum, score) => sum + score, 0) / adminCount!
-
-      // カテゴリ別の平均スコアを計算
-      const performanceScores: number[] = []
-      const behaviorScores: number[] = []
-      const growthScores: number[] = []
-
-      responsesWithItems?.forEach((response) => {
-        const items = response.items || []
-
-        // 成果評価の合計
-        const performanceTotal = items
-          .filter((item: any) => item.category === 'performance')
-          .reduce((sum: number, item: any) => sum + (item.score || 0), 0)
-        performanceScores.push(performanceTotal)
-
-        // 行動評価の合計
-        const behaviorTotal = items
-          .filter((item: any) => item.category === 'behavior')
-          .reduce((sum: number, item: any) => sum + (item.score || 0), 0)
-        behaviorScores.push(behaviorTotal)
-
-        // 成長評価の合計
-        const growthTotal = items
-          .filter((item: any) => item.category === 'growth')
-          .reduce((sum: number, item: any) => sum + (item.score || 0), 0)
-        growthScores.push(growthTotal)
-      })
-
-      const avgPerformance = performanceScores.reduce((sum, score) => sum + score, 0) / adminCount!
-      const avgBehavior = behaviorScores.reduce((sum, score) => sum + score, 0) / adminCount!
-      const avgGrowth = growthScores.reduce((sum, score) => sum + score, 0) / adminCount!
 
       // カスタムランク設定を取得
       const { data: rankSettings } = await supabase

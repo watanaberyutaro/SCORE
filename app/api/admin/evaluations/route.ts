@@ -32,44 +32,60 @@ export async function GET(request: NextRequest) {
     // スタッフ一覧を取得（同じ企業のみ）
     const { data: staff, error: staffError } = await supabase
       .from('users')
-      .select('*')
+      .select('id, email, full_name, department, position, role, company_id, created_at')
       .eq('role', 'staff')
       .eq('company_id', currentUser.company_id)
       .order('full_name')
 
     if (staffError) throw staffError
+    if (!staff || staff.length === 0) {
+      return NextResponse.json({ data: [] })
+    }
 
-    // 各スタッフの評価状況を取得
-    const staffWithEvaluations = await Promise.all(
-      staff.map(async (s) => {
-        let query = supabase
-          .from('evaluations')
-          .select(
-            `
-            *,
-            responses:evaluation_responses(
-              id,
-              admin_id,
-              total_score,
-              submitted_at,
-              admin:users!evaluation_responses_admin_id_fkey(full_name)
-            )
-          `
-          )
-          .eq('staff_id', s.id)
+    // 全スタッフの評価を1回のクエリで取得（N+1クエリを解消）
+    const staffIds = staff.map(s => s.id)
 
-        if (period) {
-          query = query.eq('evaluation_period', period)
-        }
+    let evaluationsQuery = supabase
+      .from('evaluations')
+      .select(
+        `
+        *,
+        responses:evaluation_responses(
+          id,
+          admin_id,
+          total_score,
+          submitted_at,
+          admin:users!evaluation_responses_admin_id_fkey(full_name)
+        )
+      `
+      )
+      .in('staff_id', staffIds)
+      .order('created_at', { ascending: false })
 
-        const { data: evaluations } = await query.order('created_at', { ascending: false }).limit(1)
+    if (period) {
+      evaluationsQuery = evaluationsQuery.eq('evaluation_period', period)
+    }
 
-        return {
-          ...s,
-          latest_evaluation: evaluations?.[0] || null,
-        }
-      })
-    )
+    const { data: allEvaluations, error: evalError } = await evaluationsQuery
+
+    if (evalError) {
+      console.error('Error fetching evaluations:', evalError)
+      // エラーが発生してもスタッフ一覧は返す
+    }
+
+    // スタッフIDごとに最新の評価をマッピング
+    const evaluationsByStaffId: Record<string, any> = {}
+    allEvaluations?.forEach((evaluation) => {
+      if (!evaluationsByStaffId[evaluation.staff_id]) {
+        evaluationsByStaffId[evaluation.staff_id] = evaluation
+      }
+    })
+
+    // スタッフと評価を結合
+    const staffWithEvaluations = staff.map((s) => ({
+      ...s,
+      latest_evaluation: evaluationsByStaffId[s.id] || null,
+    }))
 
     return NextResponse.json({ data: staffWithEvaluations })
   } catch (error: any) {

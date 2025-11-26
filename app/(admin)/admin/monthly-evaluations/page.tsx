@@ -49,16 +49,36 @@ async function getMonthlyEvaluations(year: number, month: number) {
   // 同じ企業の評価のみフィルタ
   const filteredEvaluations = evaluations?.filter(e => e.staff?.company_id === currentUser.company_id)
 
-  // 各評価のレスポンスを取得
-  const evaluationsWithResponses = await Promise.all(
-    (filteredEvaluations || []).map(async (evaluation) => {
-      const { data: responses } = await supabase
-        .from('evaluation_responses')
-        .select('*')
-        .eq('evaluation_id', evaluation.id)
-      return { ...evaluation, responses: responses || [] }
+  // 全評価のレスポンスを1回のクエリで取得（N+1クエリを解消）
+  let evaluationsWithResponses: any[] = []
+
+  if (filteredEvaluations && filteredEvaluations.length > 0) {
+    const evaluationIds = filteredEvaluations.map(e => e.id)
+
+    const { data: allResponses, error: responsesError } = await supabase
+      .from('evaluation_responses')
+      .select('*')
+      .in('evaluation_id', evaluationIds)
+
+    if (responsesError) {
+      console.error('Error fetching responses:', responsesError)
+    }
+
+    // 評価IDごとにレスポンスをグループ化
+    const responsesByEvaluationId: Record<string, any[]> = {}
+    allResponses?.forEach((response) => {
+      if (!responsesByEvaluationId[response.evaluation_id]) {
+        responsesByEvaluationId[response.evaluation_id] = []
+      }
+      responsesByEvaluationId[response.evaluation_id].push(response)
     })
-  )
+
+    // 評価とレスポンスを結合
+    evaluationsWithResponses = filteredEvaluations.map((evaluation) => ({
+      ...evaluation,
+      responses: responsesByEvaluationId[evaluation.id] || [],
+    }))
+  }
 
   // スタッフごとの評価状況をマッピング
   const staffEvaluations = (allStaff || []).map(staff => {
@@ -207,6 +227,13 @@ export default async function MonthlyEvaluationsPage({
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  {evaluation && (
+                    <Link href={`/admin/evaluation-detail/${staff.id}?year=${year}&month=${month}`}>
+                      <Button size="sm" variant="outline">
+                        詳細
+                      </Button>
+                    </Link>
+                  )}
                   <Link href={`/admin/evaluations/${staff.id}?year=${year}&month=${month}`}>
                     <Button size="sm" variant={mySubmitted ? "outline" : "default"}>
                       {mySubmitted ? '評価を編集' : '評価を入力'}

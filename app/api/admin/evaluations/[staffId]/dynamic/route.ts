@@ -211,12 +211,7 @@ export async function POST(
     // この評価に対する完了済みの回答数を確認
     const { data: allResponses } = await supabase
       .from('evaluation_responses')
-      .select(`
-        id,
-        total_score,
-        submitted_at,
-        items:evaluation_items(score)
-      `)
+      .select('id, total_score, submitted_at')
       .eq('evaluation_id', evaluationId)
 
     // 提出済み（下書きでない）回答のみをフィルタ
