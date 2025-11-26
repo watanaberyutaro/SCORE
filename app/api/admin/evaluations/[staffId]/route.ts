@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { calculateScores, determineRank } from '@/lib/utils/evaluation-calculator'
+import { calculateScores, determineRank, type RankSetting } from '@/lib/utils/evaluation-calculator'
 
 // GET: 特定スタッフの評価を取得
 export async function GET(
@@ -277,16 +277,38 @@ export async function POST(
 
     if (itemsError) throw itemsError
 
-    // 3名の管理者全員が提出済みか確認
+    // 企業の管理者数を取得
+    const { data: userData } = await supabase
+      .from('users')
+      .select('company_id')
+      .eq('id', user.id)
+      .single()
+
+    const { data: adminUsers, error: adminCountError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('company_id', userData!.company_id)
+      .eq('role', 'admin')
+
+    if (adminCountError) {
+      console.error('Error fetching admin count:', adminCountError)
+    }
+
+    const adminCount = adminUsers?.length || 0
+
+    // 全管理者が提出済みか確認
     const { data: allResponses } = await supabase
       .from('evaluation_responses')
       .select('id, submitted_at')
       .eq('evaluation_id', evaluation!.id)
 
+    // 提出済み（下書きでない）回答のみをカウント
+    const submittedResponses = allResponses?.filter((r) => r.submitted_at !== null) || []
+
     const allSubmitted =
-      allResponses &&
-      allResponses.length === 3 &&
-      allResponses.every((r) => r.submitted_at !== null)
+      submittedResponses &&
+      adminCount &&
+      submittedResponses.length === adminCount
 
     if (allSubmitted) {
       // 全ての回答とその評価項目を取得
@@ -297,7 +319,7 @@ export async function POST(
 
       // 平均スコアを計算
       const totalScores = responsesWithItems?.map((r) => r.total_score || 0) || []
-      const averageScore = totalScores.reduce((sum, score) => sum + score, 0) / totalScores.length
+      const averageScore = totalScores.reduce((sum, score) => sum + score, 0) / adminCount!
 
       // カテゴリ別の平均スコアを計算
       const performanceScores: number[] = []
@@ -326,11 +348,19 @@ export async function POST(
         growthScores.push(growthTotal)
       })
 
-      const avgPerformance = performanceScores.reduce((sum, score) => sum + score, 0) / performanceScores.length
-      const avgBehavior = behaviorScores.reduce((sum, score) => sum + score, 0) / behaviorScores.length
-      const avgGrowth = growthScores.reduce((sum, score) => sum + score, 0) / growthScores.length
+      const avgPerformance = performanceScores.reduce((sum, score) => sum + score, 0) / adminCount!
+      const avgBehavior = behaviorScores.reduce((sum, score) => sum + score, 0) / adminCount!
+      const avgGrowth = growthScores.reduce((sum, score) => sum + score, 0) / adminCount!
 
-      const rank = determineRank(averageScore)
+      // カスタムランク設定を取得
+      const { data: rankSettings } = await supabase
+        .from('rank_settings')
+        .select('rank_name, min_score, amount, display_order')
+        .eq('company_id', userData!.company_id)
+        .order('display_order', { ascending: false })
+
+      // ランクを判定（新しいdetermineRank関数を使用）
+      const rank = determineRank(averageScore, rankSettings || undefined)
 
       // 評価を完了状態に更新
       await supabase
@@ -338,9 +368,7 @@ export async function POST(
         .update({
           status: 'completed',
           total_score: averageScore,
-          performance_score: avgPerformance,
-          behavior_score: avgBehavior,
-          growth_score: avgGrowth,
+          average_score: averageScore,
           rank: rank,
         })
         .eq('id', evaluation!.id)
