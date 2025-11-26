@@ -161,22 +161,6 @@ export async function POST(
 
     const newResponse = { id: responseId }
 
-    if (responseError || !newResponse) {
-      console.error('Error creating response:', responseError)
-      console.error('ResponseError details:', JSON.stringify(responseError, null, 2))
-      console.error('Trying to insert:', {
-        evaluation_id: evaluationId,
-        admin_id: userData.user.id,
-        total_score: 0,
-      })
-      return NextResponse.json({
-        error: 'Failed to create response',
-        details: responseError?.message || 'No response returned',
-        code: responseError?.code,
-        hint: responseError?.hint
-      }, { status: 500 })
-    }
-
     // 評価項目の詳細を保存
     const itemsToInsert = Object.entries(scores).map(([itemId, score]) => {
       const item = itemsMaster.find(i => i.id === itemId)
