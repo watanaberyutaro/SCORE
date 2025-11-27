@@ -246,7 +246,7 @@ export function DynamicEvaluationForm({
                       type="number"
                       min={item.min_score}
                       max={item.max_score}
-                      step="0.5"
+                      step="1"
                       value={scores[item.id] || 0}
                       onChange={(e) => handleScoreChange(item.id, e.target.value)}
                       className="w-24 border-2"

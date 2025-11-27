@@ -174,7 +174,7 @@ export function EvaluationForm({
                   type="number"
                   min={item.minScore}
                   max={item.maxScore}
-                  step="0.5"
+                  step="1"
                   value={formData.performance[item.id as keyof typeof formData.performance]}
                   onChange={(e) => handleScoreChange('performance', item.id, e.target.value)}
                   className="w-24"
@@ -213,7 +213,7 @@ export function EvaluationForm({
                   type="number"
                   min={item.minScore}
                   max={item.maxScore}
-                  step="0.5"
+                  step="1"
                   value={formData.behavior[item.id as keyof typeof formData.behavior]}
                   onChange={(e) => handleScoreChange('behavior', item.id, e.target.value)}
                   className="w-24"
@@ -252,7 +252,7 @@ export function EvaluationForm({
                   type="number"
                   min={item.minScore}
                   max={item.maxScore}
-                  step="0.5"
+                  step="1"
                   value={formData.growth[item.id as keyof typeof formData.growth]}
                   onChange={(e) => handleScoreChange('growth', item.id, e.target.value)}
                   className="w-24"
