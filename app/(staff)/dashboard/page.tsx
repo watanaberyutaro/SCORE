@@ -3,16 +3,24 @@ import { getCurrentUser } from '@/lib/auth/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { getRankColor } from '@/lib/utils/evaluation-calculator'
+import { getRankColor, type RankSetting } from '@/lib/utils/evaluation-calculator'
 import { formatDate } from '@/lib/utils/format'
 import { Award, Target, MessageSquare, TrendingUp, TrendingDown, Minus, Clock, CheckCircle, AlertCircle, Zap, Trophy, BarChart3 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { redirect } from 'next/navigation'
 import { determineRank } from '@/lib/utils/evaluation-calculator'
+import { getCategoryName, type CategoryMaster } from '@/lib/utils/category-mapper'
 
-async function getDashboardData(userId: string) {
+async function getDashboardData(userId: string, companyId: string) {
   const supabase = await createSupabaseServerClient()
+
+  // 企業のランク設定を取得
+  const { data: rankSettings } = await supabase
+    .from('rank_settings')
+    .select('rank_name, min_score, amount, display_order')
+    .eq('company_id', companyId)
+    .order('display_order', { ascending: false })
 
   // 現在の期を計算（7月始まり）
   const now = new Date()
@@ -79,7 +87,7 @@ async function getDashboardData(userId: string) {
 
   // 期の平均ランクを判定
   const fiscalYearAverageRank = fiscalYearAverageScore !== null
-    ? determineRank(fiscalYearAverageScore)
+    ? determineRank(fiscalYearAverageScore, rankSettings || undefined)
     : null
 
   // カテゴリ別スコアの平均も計算
@@ -141,7 +149,24 @@ export default async function StaffDashboardPage() {
     redirect('/login')
   }
 
-  const data = await getDashboardData(user.id)
+  const data = await getDashboardData(user.id, user.company_id)
+
+  // 企業のカテゴリマスターを取得
+  const supabase = await createSupabaseServerClient()
+
+  const { data: categoryMasters } = await supabase
+    .from('evaluation_categories')
+    .select('id, category_key, category_label, display_order, description')
+    .eq('company_id', user.company_id)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
+  // ランク設定も取得（表示用）
+  const { data: rankSettings } = await supabase
+    .from('rank_settings')
+    .select('rank_name, min_score, amount, display_order')
+    .eq('company_id', user.company_id)
+    .order('display_order', { ascending: false })
 
   // 前月比較の計算（最新月と前月の比較）
   const scoreChange = data.latestEvaluation && data.previousEvaluation &&
@@ -220,7 +245,7 @@ export default async function StaffDashboardPage() {
           <CardContent>
             {data.fiscalYearAverageRank ? (
               <>
-                <Badge className={`text-3xl px-3 py-1 ${getRankColor(data.fiscalYearAverageRank)}`}>
+                <Badge className={`text-3xl px-3 py-1 ${getRankColor(data.fiscalYearAverageRank, rankSettings || undefined)}`}>
                   {data.fiscalYearAverageRank}
                 </Badge>
                 <p className="text-xs text-black mt-2">期の平均評価</p>
@@ -342,7 +367,7 @@ export default async function StaffDashboardPage() {
                         {evaluation.total_score?.toFixed(1) || '-'}
                       </div>
                       {evaluation.rank && (
-                        <Badge className={`${getRankColor(evaluation.rank)} text-xs`}>
+                        <Badge className={`${getRankColor(evaluation.rank, rankSettings || undefined)} text-xs`}>
                           {evaluation.rank}
                         </Badge>
                       )}

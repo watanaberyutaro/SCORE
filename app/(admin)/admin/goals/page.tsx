@@ -13,6 +13,26 @@ import { formatDate } from '@/lib/utils/format'
 async function getAdminGoalsData() {
   const supabase = await createSupabaseServerClient()
 
+  // 現在のユーザーのcompany_idを取得
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { goals: [] }
+  }
+
+  const { data: currentUser } = await supabase
+    .from('users')
+    .select('company_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!currentUser) {
+    return { goals: [] }
+  }
+
+  // 同じ企業の目標のみ取得
   const { data: goals } = await supabase
     .from('staff_goals')
     .select(`
@@ -20,6 +40,7 @@ async function getAdminGoalsData() {
       staff:users!staff_goals_staff_id_fkey(id, full_name, email),
       reviewer:users!staff_goals_reviewed_by_fkey(full_name)
     `)
+    .eq('company_id', currentUser.company_id)
     .order('created_at', { ascending: false })
 
   return { goals: goals || [] }

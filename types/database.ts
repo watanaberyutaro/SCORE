@@ -447,6 +447,38 @@ export type Database = {
           created_at?: string
         }
       }
+      rank_settings: {
+        Row: {
+          id: string
+          company_id: string
+          rank_name: string
+          min_score: number
+          amount: number
+          display_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          rank_name: string
+          min_score?: number
+          amount?: number
+          display_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          rank_name?: string
+          min_score?: number
+          amount?: number
+          display_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never

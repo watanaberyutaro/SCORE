@@ -103,6 +103,15 @@ export default function LoginPage() {
               {loading ? 'ログイン中...' : 'ログイン'}
             </Button>
 
+            <div className="text-center">
+              <Link
+                href="/forgot-password"
+                className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
+              >
+                パスワードをお忘れの方
+              </Link>
+            </div>
+
             <div className="space-y-3 text-center pt-4 border-t border-gray-200">
               <p className="text-sm text-gray-600">アカウントをお持ちでない方</p>
               <div className="flex flex-col gap-2">

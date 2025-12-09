@@ -61,14 +61,18 @@ export default function StaffEvaluationPage({ params }: StaffEvaluationPageProps
       })
 
       if (!response.ok) {
-        throw new Error('Failed to save evaluation')
+        const errorData = await response.json()
+        console.error('Server error details:', errorData)
+        console.error('Error code:', errorData.code)
+        console.error('Error hint:', errorData.hint)
+        throw new Error(errorData.details || errorData.error || 'Failed to save evaluation')
       }
 
       alert(isDraft ? '下書きを保存しました' : '評価を提出しました')
       router.push(`/admin/monthly-evaluations?year=${year}&month=${month}`)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving evaluation:', error)
-      alert('評価の保存に失敗しました')
+      alert(`評価の保存に失敗しました: ${error.message}`)
     } finally {
       setSubmitting(false)
     }

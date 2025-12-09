@@ -279,6 +279,76 @@ export function useAuth() {
     }
   }
 
+  // パスワードリセット依頼
+  async function requestPasswordReset(companyCode: string, email: string) {
+    try {
+      // 1. 企業コードの検証
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select('id, company_code, company_name, is_active')
+        .eq('company_code', companyCode)
+        .single()
+
+      if (companyError || !companyData) {
+        throw new Error('企業コードが正しくありません')
+      }
+
+      if (!companyData.is_active) {
+        throw new Error('この企業アカウントは無効化されています')
+      }
+
+      // 2. メールアドレスがこの企業に所属しているか確認
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, email, company_id')
+        .eq('email', email)
+        .eq('company_id', companyData.id)
+        .single()
+
+      if (userError || !userData) {
+        // セキュリティのため、ユーザーが存在しない場合も成功メッセージを返す
+        // （メールアドレスの存在を推測されないようにする）
+        return { success: true }
+      }
+
+      // 3. パスワードリセットメール送信
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`
+
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      })
+
+      if (resetError) {
+        throw resetError
+      }
+
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
+  }
+
+  // パスワード再設定
+  async function resetPassword(newPassword: string) {
+    try {
+      // パスワード更新
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      })
+
+      if (error) {
+        throw error
+      }
+
+      // パスワード変更後は自動的にログアウト
+      await supabase.auth.signOut()
+
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
+  }
+
   return {
     user,
     loading,
@@ -286,6 +356,8 @@ export function useAuth() {
     signOut,
     registerCompany,
     registerUser,
+    requestPasswordReset,
+    resetPassword,
     isAdmin: user?.is_admin === true,
   }
 }

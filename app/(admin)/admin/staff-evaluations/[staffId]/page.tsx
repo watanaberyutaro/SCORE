@@ -12,6 +12,38 @@ import { EvaluationCharts } from '@/components/evaluation/evaluation-charts'
 import { MonthSelector } from '@/components/evaluation/month-selector'
 import { QuarterSelector } from '@/components/evaluation/quarter-selector'
 import Link from 'next/link'
+import { getCategoryName, type CategoryMaster } from '@/lib/utils/category-mapper'
+
+// カテゴリ別の色を定義するヘルパー関数
+const getCategoryColor = (categoryKey: string) => {
+  const colorMap: Record<string, { border: string; bg: string; text: string; progressBg: string }> = {
+    performance: {
+      border: 'border-green-500',
+      bg: 'bg-green-50/30',
+      text: 'text-green-700',
+      progressBg: 'bg-green-500',
+    },
+    behavior: {
+      border: 'border-purple-500',
+      bg: 'bg-purple-50/30',
+      text: 'text-purple-700',
+      progressBg: 'bg-purple-500',
+    },
+    growth: {
+      border: 'border-orange-500',
+      bg: 'bg-orange-50/30',
+      text: 'text-orange-700',
+      progressBg: 'bg-orange-500',
+    },
+  }
+  // カスタムカテゴリの場合はデフォルトの青色を返す
+  return colorMap[categoryKey] || {
+    border: 'border-blue-500',
+    bg: 'bg-blue-50/30',
+    text: 'text-blue-700',
+    progressBg: 'bg-blue-500',
+  }
+}
 
 async function getStaffEvaluations(staffId: string) {
   const supabase = await createSupabaseServerClient()
@@ -47,9 +79,26 @@ async function getStaffEvaluations(staffId: string) {
     .order('evaluation_year', { ascending: false })
     .order('evaluation_month', { ascending: false })
 
+  // カテゴリマスターを取得
+  const { data: categoryMasters } = await supabase
+    .from('evaluation_categories')
+    .select('id, category_key, category_label, display_order, description')
+    .eq('company_id', staff.company_id)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
+  // 評価項目マスターを取得
+  const { data: itemMasters } = await supabase
+    .from('evaluation_items_master')
+    .select('*')
+    .eq('company_id', staff.company_id)
+    .order('display_order', { ascending: true })
+
   return {
     staff,
-    evaluations: evaluations || []
+    evaluations: evaluations || [],
+    categoryMasters: (categoryMasters || []) as CategoryMaster[],
+    itemMasters: itemMasters || [],
   }
 }
 
@@ -66,7 +115,7 @@ export default async function AdminStaffEvaluationDetailPage({
     redirect('/admin/evaluations')
   }
 
-  const { staff, evaluations } = data
+  const { staff, evaluations, categoryMasters, itemMasters } = data
 
   // クオーター計算関数
   const getQuarter = (month: number) => Math.ceil(month / 3)
@@ -121,32 +170,32 @@ export default async function AdminStaffEvaluationDetailPage({
     if (validScores.length > 0) {
         const averageTotalScore = validScores.reduce((sum, score) => sum + score, 0) / validScores.length
 
-        // カテゴリ別スコアの平均を計算
-        let totalPerformance = 0
-        let totalBehavior = 0
-        let totalGrowth = 0
-        let performanceCount = 0
-        let behaviorCount = 0
-        let growthCount = 0
+        // カテゴリ別スコアの平均を動的に計算
+        const categoryScoreTotals: Record<string, { total: number; count: number }> = {}
 
-        quarterEvaluations.forEach((e) => {
-          if (e.performance_score !== null && e.performance_score !== undefined) {
-            totalPerformance += e.performance_score
-            performanceCount++
-          }
-          if (e.behavior_score !== null && e.behavior_score !== undefined) {
-            totalBehavior += e.behavior_score
-            behaviorCount++
-          }
-          if (e.growth_score !== null && e.growth_score !== undefined) {
-            totalGrowth += e.growth_score
-            growthCount++
-          }
+        // カテゴリごとの合計とカウントを初期化
+        categoryMasters.forEach((category) => {
+          categoryScoreTotals[category.category_key] = { total: 0, count: 0 }
         })
 
-        const avgPerformance = performanceCount > 0 ? totalPerformance / performanceCount : null
-        const avgBehavior = behaviorCount > 0 ? totalBehavior / behaviorCount : null
-        const avgGrowth = growthCount > 0 ? totalGrowth / growthCount : null
+        // 各評価からカテゴリスコアを集計
+        quarterEvaluations.forEach((e) => {
+          categoryMasters.forEach((category) => {
+            const scoreKey = `${category.category_key}_score` as keyof typeof e
+            const score = e[scoreKey]
+            if (score !== null && score !== undefined && typeof score === 'number') {
+              categoryScoreTotals[category.category_key].total += score
+              categoryScoreTotals[category.category_key].count++
+            }
+          })
+        })
+
+        // 各カテゴリの平均を計算
+        const categoryAverages: Record<string, number | null> = {}
+        Object.keys(categoryScoreTotals).forEach((categoryKey) => {
+          const { total, count } = categoryScoreTotals[categoryKey]
+          categoryAverages[categoryKey] = count > 0 ? total / count : null
+        })
 
         // 全ての月の評価データを統合
       const allResponses: any[] = []
@@ -156,16 +205,20 @@ export default async function AdminStaffEvaluationDetailPage({
         }
       })
 
-      // 仮想的な「総合」評価オブジェクトを作成
+      // 仮想的な「総合」評価オブジェクトを作成（動的カテゴリスコアを含む）
+      const summaryScores: Record<string, number | null> = {}
+      categoryMasters.forEach((category) => {
+        const scoreKey = `${category.category_key}_score`
+        summaryScores[scoreKey] = categoryAverages[category.category_key]
+      })
+
       quarterlySummary = {
         id: 'quarter-summary',
         staff_id: staff.id,
         evaluation_year: selectedYear,
         evaluation_month: 0, // 0は総合を表す
         total_score: averageTotalScore,
-        performance_score: avgPerformance,
-        behavior_score: avgBehavior,
-        growth_score: avgGrowth,
+        ...summaryScores, // 動的カテゴリスコアを展開
         rank: quarterEvaluations[0].rank, // 最新の評価のランクを使用
         status: 'completed',
         responses: allResponses, // 全月のresponsesを含める
@@ -192,25 +245,40 @@ export default async function AdminStaffEvaluationDetailPage({
 
   const latestEvaluation = selectedEvaluation || evaluationsWithSummary[0]
 
-  // 評価項目の定義（DBのitem_nameと一致させる）
-  const itemCategories = {
-    performance: [
+  // 評価項目を動的に構築（データベースから取得した項目マスターを使用）
+  const itemCategories: Record<string, Array<{ key: string; label: string; max: number }>> = {}
+
+  // itemMasters から動的に構築
+  if (itemMasters && itemMasters.length > 0) {
+    itemMasters.forEach((item: any) => {
+      if (!itemCategories[item.category]) {
+        itemCategories[item.category] = []
+      }
+      itemCategories[item.category].push({
+        key: item.item_name,
+        label: item.item_label || item.item_name,
+        max: item.max_score,
+      })
+    })
+  } else {
+    // デフォルト値（データベースに設定がない場合）
+    itemCategories.performance = [
       { key: '実績評価', label: '実績評価', max: 25 },
       { key: '勤怠評価', label: '勤怠評価', max: 5 },
       { key: 'コンプライアンス評価', label: 'コンプライアンス', max: 3 },
       { key: 'クライアント評価', label: 'クライアント評価', max: 15 },
-    ],
-    behavior: [
+    ]
+    itemCategories.behavior = [
       { key: '主体性評価', label: '主体性', max: 10 },
       { key: '責任感', label: '責任感', max: 7 },
       { key: '協調性評価', label: '協調性', max: 10 },
       { key: 'アピアランス評価', label: 'アピアランス', max: 3 },
-    ],
-    growth: [
+    ]
+    itemCategories.growth = [
       { key: '自己研鑽評価', label: '自己研鑽', max: 7 },
       { key: 'レスポンス評価', label: 'レスポンス', max: 5 },
       { key: '自己目標達成評価', label: '自己目標達成', max: 10 },
-    ],
+    ]
   }
 
   return (
@@ -323,6 +391,7 @@ export default async function AdminStaffEvaluationDetailPage({
           <EvaluationCharts
             evaluation={latestEvaluation}
             itemCategories={itemCategories}
+            categories={categoryMasters}
           />
 
           {/* 詳細タブ */}
@@ -332,363 +401,166 @@ export default async function AdminStaffEvaluationDetailPage({
               <TabsTrigger value="comments">管理者コメント</TabsTrigger>
             </TabsList>
 
-            {/* 評価項目別詳細タブ */}
+            {/* 評価項目別詳細タブ - 動的カテゴリ対応 */}
             <TabsContent value="items">
               <div className="grid grid-cols-1 gap-6">
-                {/* 成果評価 */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">成果評価</CardTitle>
-                    <CardDescription>業務実績と成果に関する評価</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-6">
-                      {itemCategories.performance.map((item) => {
-                        const allAdminScores: { admin: string; score: number; comment: string | null }[] = []
+                {categoryMasters.map((category) => {
+                  const items = itemCategories[category.category_key] || []
+                  if (items.length === 0) return null
 
-                        latestEvaluation.responses?.forEach((response: any) => {
-                          // 同じitem_nameの項目がある場合、最新のものを使用（created_atでソート）
-                          const matchingItems = response.items?.filter((i: any) => i.item_name === item.key) || []
-                          if (matchingItems.length > 0) {
-                            // 最新のitemを取得（created_atで降順ソート）
-                            const latestItem = matchingItems.sort((a: any, b: any) =>
-                              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                            )[0]
+                  const colors = getCategoryColor(category.category_key)
 
-                            allAdminScores.push({
-                              admin: response.admin.full_name,
-                              score: latestItem.score,
-                              comment: latestItem.comment,
+                  return (
+                    <Card key={category.category_key}>
+                      <CardHeader>
+                        <CardTitle className="text-lg">{category.category_label}</CardTitle>
+                        <CardDescription>{category.description || `${category.category_label}に関する評価`}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-6">
+                          {items.map((item) => {
+                            const allAdminScores: { admin: string; score: number; comment: string | null }[] = []
+
+                            latestEvaluation.responses?.forEach((response: any) => {
+                              // 同じitem_nameの項目がある場合、最新のものを使用（created_atでソート）
+                              const matchingItems = response.items?.filter((i: any) => i.item_name === item.key) || []
+                              if (matchingItems.length > 0) {
+                                // 最新のitemを取得（created_atで降順ソート）
+                                const latestItem = matchingItems.sort((a: any, b: any) =>
+                                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                                )[0]
+
+                                allAdminScores.push({
+                                  admin: response.admin.full_name,
+                                  score: latestItem.score,
+                                  comment: latestItem.comment,
+                                })
+                              }
                             })
-                          }
-                        })
 
-                        const avgScore = allAdminScores.length > 0
-                          ? allAdminScores.reduce((sum, s) => sum + s.score, 0) / allAdminScores.length
-                          : 0
+                            const avgScore = allAdminScores.length > 0
+                              ? allAdminScores.reduce((sum, s) => sum + s.score, 0) / allAdminScores.length
+                              : 0
 
-                        return (
-                          <div key={item.key} className="border-l-4 border-green-500 pl-4 py-3 bg-green-50/30 rounded-r-lg">
-                            <div className="flex justify-between items-center mb-2">
-                              <h4 className="font-semibold text-gray-900">{item.label}</h4>
-                              <div className="text-right">
-                                <span className="text-xl font-bold text-green-700">
-                                  {avgScore.toFixed(1)}
-                                </span>
-                                <span className="text-sm text-gray-500 ml-1">
-                                  / {item.max}点
-                                </span>
-                              </div>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-                              <div
-                                className="bg-green-500 h-2 rounded-full transition-all"
-                                style={{ width: `${(avgScore / item.max) * 100}%` }}
-                              />
-                            </div>
-
-                            {/* 各管理者のスコア表示 */}
-                            <div className="grid grid-cols-3 gap-2 mb-3">
-                              {allAdminScores.map((adminScore, idx) => (
-                                <div key={idx} className="bg-white rounded px-2 py-1 text-center border border-green-200">
-                                  <p className="text-[10px] text-gray-600">{adminScore.admin}</p>
-                                  <p className="text-sm font-bold text-green-700">{adminScore.score}点</p>
+                            return (
+                              <div key={item.key} className={`border-l-4 ${colors.border} pl-4 py-3 ${colors.bg} rounded-r-lg`}>
+                                <div className="flex justify-between items-center mb-2">
+                                  <h4 className="font-semibold text-gray-900">{item.label}</h4>
+                                  <div className="text-right">
+                                    <span className={`text-xl font-bold ${colors.text}`}>
+                                      {avgScore.toFixed(1)}
+                                    </span>
+                                    <span className="text-sm text-gray-500 ml-1">
+                                      / {item.max}点
+                                    </span>
+                                  </div>
                                 </div>
-                              ))}
-                            </div>
-
-                            {/* コメント表示 */}
-                            {allAdminScores.some(s => s.comment) && (
-                              <div className="mt-3 space-y-2">
-                                <p className="text-xs font-medium text-gray-600 flex items-center gap-1">
-                                  <MessageSquare className="h-3 w-3" />
-                                  管理者からのコメント ({allAdminScores.filter(s => s.comment).length}件)
-                                </p>
-                                {allAdminScores.map((adminScore, idx) => (
-                                  adminScore.comment && (
-                                    <div key={idx} className="bg-white rounded-lg p-3 border-l-4 border-green-400 shadow-sm">
-                                      <p className="text-xs font-semibold text-green-800 mb-1">
-                                        {adminScore.admin} （{adminScore.score}点）
-                                      </p>
-                                      <p className="text-sm text-gray-700 leading-relaxed">{adminScore.comment}</p>
-                                    </div>
-                                  )
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* 行動評価 */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">行動評価</CardTitle>
-                    <CardDescription>勤務態度と行動特性に関する評価</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-6">
-                      {itemCategories.behavior.map((item) => {
-                        const allAdminScores: { admin: string; score: number; comment: string | null }[] = []
-
-                        latestEvaluation.responses?.forEach((response: any) => {
-                          // 同じitem_nameの項目がある場合、最新のものを使用（created_atでソート）
-                          const matchingItems = response.items?.filter((i: any) => i.item_name === item.key) || []
-                          if (matchingItems.length > 0) {
-                            // 最新のitemを取得（created_atで降順ソート）
-                            const latestItem = matchingItems.sort((a: any, b: any) =>
-                              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                            )[0]
-
-                            allAdminScores.push({
-                              admin: response.admin.full_name,
-                              score: latestItem.score,
-                              comment: latestItem.comment,
-                            })
-                          }
-                        })
-
-                        const avgScore = allAdminScores.length > 0
-                          ? allAdminScores.reduce((sum, s) => sum + s.score, 0) / allAdminScores.length
-                          : 0
-
-                        return (
-                          <div key={item.key} className="border-l-4 border-purple-500 pl-4 py-3 bg-purple-50/30 rounded-r-lg">
-                            <div className="flex justify-between items-center mb-2">
-                              <h4 className="font-semibold text-gray-900">{item.label}</h4>
-                              <div className="text-right">
-                                <span className="text-xl font-bold text-purple-700">
-                                  {avgScore.toFixed(1)}
-                                </span>
-                                <span className="text-sm text-gray-500 ml-1">
-                                  / {item.max}点
-                                </span>
-                              </div>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-                              <div
-                                className="bg-purple-500 h-2 rounded-full transition-all"
-                                style={{ width: `${(avgScore / item.max) * 100}%` }}
-                              />
-                            </div>
-
-                            {/* 各管理者のスコア表示 */}
-                            <div className="grid grid-cols-3 gap-2 mb-3">
-                              {allAdminScores.map((adminScore, idx) => (
-                                <div key={idx} className="bg-white rounded px-2 py-1 text-center border border-purple-200">
-                                  <p className="text-[10px] text-gray-600">{adminScore.admin}</p>
-                                  <p className="text-sm font-bold text-purple-700">{adminScore.score}点</p>
+                                <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                                  <div
+                                    className={`${colors.progressBg} h-2 rounded-full transition-all`}
+                                    style={{ width: `${(avgScore / item.max) * 100}%` }}
+                                  />
                                 </div>
-                              ))}
-                            </div>
 
-                            {/* コメント表示 */}
-                            {allAdminScores.some(s => s.comment) && (
-                              <div className="mt-3 space-y-2">
-                                <p className="text-xs font-medium text-gray-600 flex items-center gap-1">
-                                  <MessageSquare className="h-3 w-3" />
-                                  管理者からのコメント ({allAdminScores.filter(s => s.comment).length}件)
-                                </p>
-                                {allAdminScores.map((adminScore, idx) => (
-                                  adminScore.comment && (
-                                    <div key={idx} className="bg-white rounded-lg p-3 border-l-4 border-purple-400 shadow-sm">
-                                      <p className="text-xs font-semibold text-purple-800 mb-1">
-                                        {adminScore.admin} （{adminScore.score}点）
-                                      </p>
-                                      <p className="text-sm text-gray-700 leading-relaxed">{adminScore.comment}</p>
+                                {/* 各管理者のスコア表示 */}
+                                <div className="grid grid-cols-3 gap-2 mb-3">
+                                  {allAdminScores.map((adminScore, idx) => (
+                                    <div key={idx} className={`bg-white rounded px-2 py-1 text-center border ${colors.border}`}>
+                                      <p className="text-[10px] text-gray-600">{adminScore.admin}</p>
+                                      <p className={`text-sm font-bold ${colors.text}`}>{adminScore.score}点</p>
                                     </div>
-                                  )
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* 成長評価 */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">成長評価</CardTitle>
-                    <CardDescription>スキル向上と自己研鑽に関する評価</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-6">
-                      {itemCategories.growth.map((item) => {
-                        const allAdminScores: { admin: string; score: number; comment: string | null }[] = []
-
-                        latestEvaluation.responses?.forEach((response: any) => {
-                          // 同じitem_nameの項目がある場合、最新のものを使用（created_atでソート）
-                          const matchingItems = response.items?.filter((i: any) => i.item_name === item.key) || []
-                          if (matchingItems.length > 0) {
-                            // 最新のitemを取得（created_atで降順ソート）
-                            const latestItem = matchingItems.sort((a: any, b: any) =>
-                              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                            )[0]
-
-                            allAdminScores.push({
-                              admin: response.admin.full_name,
-                              score: latestItem.score,
-                              comment: latestItem.comment,
-                            })
-                          }
-                        })
-
-                        const avgScore = allAdminScores.length > 0
-                          ? allAdminScores.reduce((sum, s) => sum + s.score, 0) / allAdminScores.length
-                          : 0
-
-                        return (
-                          <div key={item.key} className="border-l-4 border-orange-500 pl-4 py-3 bg-orange-50/30 rounded-r-lg">
-                            <div className="flex justify-between items-center mb-2">
-                              <h4 className="font-semibold text-gray-900">{item.label}</h4>
-                              <div className="text-right">
-                                <span className="text-xl font-bold text-orange-700">
-                                  {avgScore.toFixed(1)}
-                                </span>
-                                <span className="text-sm text-gray-500 ml-1">
-                                  / {item.max}点
-                                </span>
-                              </div>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-                              <div
-                                className="bg-orange-500 h-2 rounded-full transition-all"
-                                style={{ width: `${(avgScore / item.max) * 100}%` }}
-                              />
-                            </div>
-
-                            {/* 各管理者のスコア表示 */}
-                            <div className="grid grid-cols-3 gap-2 mb-3">
-                              {allAdminScores.map((adminScore, idx) => (
-                                <div key={idx} className="bg-white rounded px-2 py-1 text-center border border-orange-200">
-                                  <p className="text-[10px] text-gray-600">{adminScore.admin}</p>
-                                  <p className="text-sm font-bold text-orange-700">{adminScore.score}点</p>
+                                  ))}
                                 </div>
-                              ))}
-                            </div>
 
-                            {/* コメント表示 */}
-                            {allAdminScores.some(s => s.comment) && (
-                              <div className="mt-3 space-y-2">
-                                <p className="text-xs font-medium text-gray-600 flex items-center gap-1">
-                                  <MessageSquare className="h-3 w-3" />
-                                  管理者からのコメント ({allAdminScores.filter(s => s.comment).length}件)
-                                </p>
-                                {allAdminScores.map((adminScore, idx) => (
-                                  adminScore.comment && (
-                                    <div key={idx} className="bg-white rounded-lg p-3 border-l-4 border-orange-400 shadow-sm">
-                                      <p className="text-xs font-semibold text-orange-800 mb-1">
-                                        {adminScore.admin} （{adminScore.score}点）
-                                      </p>
-                                      <p className="text-sm text-gray-700 leading-relaxed">{adminScore.comment}</p>
-                                    </div>
-                                  )
-                                ))}
+                                {/* コメント表示 */}
+                                {allAdminScores.some(s => s.comment) && (
+                                  <div className="mt-3 space-y-2">
+                                    <p className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                      <MessageSquare className="h-3 w-3" />
+                                      管理者からのコメント ({allAdminScores.filter(s => s.comment).length}件)
+                                    </p>
+                                    {allAdminScores.map((adminScore, idx) => (
+                                      adminScore.comment && (
+                                        <div key={idx} className={`bg-white rounded-lg p-3 border-l-4 ${colors.border} shadow-sm`}>
+                                          <p className={`text-xs font-semibold ${colors.text} mb-1`}>
+                                            {adminScore.admin} （{adminScore.score}点）
+                                          </p>
+                                          <p className="text-sm text-gray-700 leading-relaxed">{adminScore.comment}</p>
+                                        </div>
+                                      )
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
+                            )
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             </TabsContent>
 
-            {/* 管理者コメントタブ - content is identical to staff page */}
+            {/* 管理者コメントタブ - 動的カテゴリ対応 */}
             <TabsContent value="comments">
               {(() => {
-                // 全管理者のコメントを統合して分析
-                const allCommentsData: {
-                  performance: string[]
-                  behavior: string[]
-                  growth: string[]
-                } = {
-                  performance: [],
-                  behavior: [],
-                  growth: [],
-                }
+                // 全管理者のコメントを動的に統合して分析
+                const allCommentsData: Record<string, string[]> = {}
+                const categoryScores: Record<string, number[]> = {}
 
-                // カテゴリ別の平均スコアを計算
-                const categoryScores: {
-                  performance: number[]
-                  behavior: number[]
-                  growth: number[]
-                } = {
-                  performance: [],
-                  behavior: [],
-                  growth: [],
-                }
+                // カテゴリごとの配列を初期化
+                categoryMasters.forEach((category) => {
+                  allCommentsData[category.category_key] = []
+                  categoryScores[category.category_key] = []
+                })
 
                 let totalCommentCount = 0
 
                 latestEvaluation.responses?.forEach((response: any) => {
                   response.items?.forEach((item: any) => {
+                    const categoryKey = item.category
+
                     // スコアを収集
-                    if (item.category === 'performance') {
-                      categoryScores.performance.push(item.score)
-                    } else if (item.category === 'behavior') {
-                      categoryScores.behavior.push(item.score)
-                    } else if (item.category === 'growth') {
-                      categoryScores.growth.push(item.score)
+                    if (categoryScores[categoryKey]) {
+                      categoryScores[categoryKey].push(item.score)
                     }
 
                     // コメントを収集
                     if (item.comment) {
                       totalCommentCount++
-                      if (item.category === 'performance') {
-                        allCommentsData.performance.push(item.comment)
-                      } else if (item.category === 'behavior') {
-                        allCommentsData.behavior.push(item.comment)
-                      } else if (item.category === 'growth') {
-                        allCommentsData.growth.push(item.comment)
+                      if (allCommentsData[categoryKey]) {
+                        allCommentsData[categoryKey].push(item.comment)
                       }
                     }
                   })
                 })
 
-                // 各カテゴリの平均スコアを計算
-                const performanceAvg = categoryScores.performance.length > 0
-                  ? categoryScores.performance.reduce((sum, s) => sum + s, 0) / categoryScores.performance.length
-                  : 0
-
-                const behaviorAvg = categoryScores.behavior.length > 0
-                  ? categoryScores.behavior.reduce((sum, s) => sum + s, 0) / categoryScores.behavior.length
-                  : 0
-
-                const growthAvg = categoryScores.growth.length > 0
-                  ? categoryScores.growth.reduce((sum, s) => sum + s, 0) / categoryScores.growth.length
-                  : 0
+                // 各カテゴリの平均スコアを動的に計算
+                const categoryAverages: Record<string, number> = {}
+                categoryMasters.forEach((category) => {
+                  const scores = categoryScores[category.category_key]
+                  categoryAverages[category.category_key] = scores.length > 0
+                    ? scores.reduce((sum, s) => sum + s, 0) / scores.length
+                    : 0
+                })
 
                 // 全体の平均スコアを計算
-                const allScores = [
-                  ...categoryScores.performance,
-                  ...categoryScores.behavior,
-                  ...categoryScores.growth,
-                ]
+                const allScores = Object.values(categoryScores).flat()
                 const overallAvg = allScores.length > 0
                   ? allScores.reduce((sum, s) => sum + s, 0) / allScores.length
                   : 0
 
-                // 簡易的な要約生成
+                // 簡易的な要約生成（動的カテゴリ対応）
                 const generateSummary = () => {
                   const summary: string[] = []
 
-                  if (allCommentsData.performance.length > 0) {
-                    summary.push(`成果評価では、${allCommentsData.performance.length}件のフィードバックがありました。`)
-                  }
-                  if (allCommentsData.behavior.length > 0) {
-                    summary.push(`行動評価では、${allCommentsData.behavior.length}件のフィードバックがありました。`)
-                  }
-                  if (allCommentsData.growth.length > 0) {
-                    summary.push(`成長評価では、${allCommentsData.growth.length}件のフィードバックがありました。`)
-                  }
+                  categoryMasters.forEach((category) => {
+                    const commentCount = allCommentsData[category.category_key].length
+                    if (commentCount > 0) {
+                      summary.push(`${category.category_label}では、${commentCount}件のフィードバックがありました。`)
+                    }
+                  })
 
                   if (summary.length === 0) {
                     return '管理者からの具体的なコメントはまだありません。'
@@ -721,37 +593,26 @@ export default async function AdminStaffEvaluationDetailPage({
                           {generateSummary()}
                         </p>
 
-                        <div className="grid grid-cols-3 gap-4 mt-4">
-                          <div className="bg-white rounded-lg p-3 text-center border border-green-200">
-                            <p className="text-xs text-gray-600 mb-1">成果評価</p>
-                            <p className="text-2xl font-bold text-green-600">
-                              {performanceAvg.toFixed(1)}
-                            </p>
-                            <p className="text-xs text-gray-500">平均点</p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {allCommentsData.performance.length}件のコメント
-                            </p>
-                          </div>
-                          <div className="bg-white rounded-lg p-3 text-center border border-purple-200">
-                            <p className="text-xs text-gray-600 mb-1">行動評価</p>
-                            <p className="text-2xl font-bold text-purple-600">
-                              {behaviorAvg.toFixed(1)}
-                            </p>
-                            <p className="text-xs text-gray-500">平均点</p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {allCommentsData.behavior.length}件のコメント
-                            </p>
-                          </div>
-                          <div className="bg-white rounded-lg p-3 text-center border border-orange-200">
-                            <p className="text-xs text-gray-600 mb-1">成長評価</p>
-                            <p className="text-2xl font-bold text-orange-600">
-                              {growthAvg.toFixed(1)}
-                            </p>
-                            <p className="text-xs text-gray-500">平均点</p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {allCommentsData.growth.length}件のコメント
-                            </p>
-                          </div>
+                        <div className={`grid grid-cols-${Math.min(categoryMasters.length, 3)} gap-4 mt-4`}>
+                          {categoryMasters.map((category) => {
+                            const colors = getCategoryColor(category.category_key)
+                            // ボーダー色からテキスト色を取得（border-*-200 -> text-*-600）
+                            const borderColorClass = colors.border.replace('border-', 'border-')
+                            const textColorClass = colors.text.replace('text-', 'text-').replace('-700', '-600')
+
+                            return (
+                              <div key={category.category_key} className={`bg-white rounded-lg p-3 text-center border ${borderColorClass}`}>
+                                <p className="text-xs text-gray-600 mb-1">{category.category_label}</p>
+                                <p className={`text-2xl font-bold ${textColorClass}`}>
+                                  {categoryAverages[category.category_key].toFixed(1)}
+                                </p>
+                                <p className="text-xs text-gray-500">平均点</p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  {allCommentsData[category.category_key].length}件のコメント
+                                </p>
+                              </div>
+                            )
+                          })}
                         </div>
                       </CardContent>
                     </Card>
@@ -784,12 +645,11 @@ export default async function AdminStaffEvaluationDetailPage({
                         // コメントがない場合はスキップ
                         if (allComments.length === 0) return null
 
-                        // カテゴリごとにグループ化
-                        const groupedComments = {
-                          performance: allComments.filter(c => c.category === 'performance'),
-                          behavior: allComments.filter(c => c.category === 'behavior'),
-                          growth: allComments.filter(c => c.category === 'growth'),
-                        }
+                        // カテゴリごとに動的にグループ化
+                        const groupedComments: Record<string, Array<{ category: string; itemName: string; comment: string }>> = {}
+                        categoryMasters.forEach((category) => {
+                          groupedComments[category.category_key] = allComments.filter(c => c.category === category.category_key)
+                        })
 
                         return (
                           <div key={responseIdx} className="border border-gray-200 rounded-lg p-5 bg-white shadow-sm">
@@ -802,58 +662,34 @@ export default async function AdminStaffEvaluationDetailPage({
                               </Badge>
                             </div>
 
-                            {/* カテゴリごとのコメント */}
+                            {/* カテゴリごとのコメント - 動的カテゴリ対応 */}
                             <div className="space-y-4">
-                              {groupedComments.performance.length > 0 && (
-                                <div>
-                                  <h4 className="text-sm font-semibold text-green-800 mb-2 flex items-center gap-1">
-                                    <span className="inline-block w-3 h-3 bg-green-500 rounded-full"></span>
-                                    成果評価に関するコメント
-                                  </h4>
-                                  <div className="space-y-2 pl-4">
-                                    {groupedComments.performance.map((c, idx) => (
-                                      <div key={idx} className="text-sm">
-                                        <span className="font-medium text-gray-700">{c.itemName}:</span>
-                                        <span className="text-gray-600 ml-2">{c.comment}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
+                              {categoryMasters.map((category) => {
+                                const categoryComments = groupedComments[category.category_key]
+                                if (!categoryComments || categoryComments.length === 0) return null
 
-                              {groupedComments.behavior.length > 0 && (
-                                <div>
-                                  <h4 className="text-sm font-semibold text-purple-800 mb-2 flex items-center gap-1">
-                                    <span className="inline-block w-3 h-3 bg-purple-500 rounded-full"></span>
-                                    行動評価に関するコメント
-                                  </h4>
-                                  <div className="space-y-2 pl-4">
-                                    {groupedComments.behavior.map((c, idx) => (
-                                      <div key={idx} className="text-sm">
-                                        <span className="font-medium text-gray-700">{c.itemName}:</span>
-                                        <span className="text-gray-600 ml-2">{c.comment}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
+                                const colors = getCategoryColor(category.category_key)
+                                // text-*-700 -> text-*-800, bg-*-500 に変換
+                                const textColorClass = colors.text.replace('-700', '-800')
+                                const bgColorClass = colors.progressBg
 
-                              {groupedComments.growth.length > 0 && (
-                                <div>
-                                  <h4 className="text-sm font-semibold text-orange-800 mb-2 flex items-center gap-1">
-                                    <span className="inline-block w-3 h-3 bg-orange-500 rounded-full"></span>
-                                    成長評価に関するコメント
-                                  </h4>
-                                  <div className="space-y-2 pl-4">
-                                    {groupedComments.growth.map((c, idx) => (
-                                      <div key={idx} className="text-sm">
-                                        <span className="font-medium text-gray-700">{c.itemName}:</span>
-                                        <span className="text-gray-600 ml-2">{c.comment}</span>
-                                      </div>
-                                    ))}
+                                return (
+                                  <div key={category.category_key}>
+                                    <h4 className={`text-sm font-semibold ${textColorClass} mb-2 flex items-center gap-1`}>
+                                      <span className={`inline-block w-3 h-3 ${bgColorClass} rounded-full`}></span>
+                                      {category.category_label}に関するコメント
+                                    </h4>
+                                    <div className="space-y-2 pl-4">
+                                      {categoryComments.map((c, idx) => (
+                                        <div key={idx} className="text-sm">
+                                          <span className="font-medium text-gray-700">{c.itemName}:</span>
+                                          <span className="text-gray-600 ml-2">{c.comment}</span>
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                )
+                              })}
                             </div>
                           </div>
                         )

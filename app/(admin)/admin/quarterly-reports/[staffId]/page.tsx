@@ -5,15 +5,33 @@ import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { ArrowLeft, TrendingUp, Calendar } from 'lucide-react'
 import { notFound } from 'next/navigation'
+import { getCategoryName, type CategoryMaster } from '@/lib/utils/category-mapper'
 
 async function getQuarterlyReportDetail(staffId: string, year: number, quarter: number) {
   const supabase = await createSupabaseServerClient()
 
-  // スタッフ情報を取得
+  // 現在のユーザーを取得
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return null
+
+  // 現在のユーザーのcompany_idを取得
+  const { data: currentUser } = await supabase
+    .from('users')
+    .select('company_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!currentUser) return null
+
+  // スタッフ情報を取得（同じ企業のみ）
   const { data: staff } = await supabase
     .from('users')
     .select('*')
     .eq('id', staffId)
+    .eq('company_id', currentUser.company_id)
     .single()
 
   if (!staff) return null
@@ -52,10 +70,19 @@ async function getQuarterlyReportDetail(staffId: string, year: number, quarter: 
     .eq('status', 'completed')
     .order('evaluation_month', { ascending: true })
 
+  // カテゴリマスターを取得
+  const { data: categoryMasters } = await supabase
+    .from('evaluation_categories')
+    .select('id, category_key, category_label, display_order, description')
+    .eq('company_id', currentUser.company_id)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
   return {
     staff,
     report,
     evaluations: evaluations || [],
+    categoryMasters: (categoryMasters || []) as CategoryMaster[],
     year,
     quarter,
     quarterMonths,
@@ -79,7 +106,7 @@ export default async function QuarterlyReportDetailPage({
     notFound()
   }
 
-  const { staff, report, evaluations, quarterMonths } = data
+  const { staff, report, evaluations, categoryMasters, quarterMonths } = data
 
   // カテゴリ別の平均を計算
   const categoryAverages = evaluations.reduce((acc, evaluation) => {
@@ -157,17 +184,17 @@ export default async function QuarterlyReportDetailPage({
                 <p className="text-xs text-gray-500 mt-1">点</p>
               </div>
               <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">成果評価平均</p>
+                <p className="text-sm text-gray-600 mb-1">{getCategoryName('performance', categoryMasters)}平均</p>
                 <p className="text-3xl font-bold text-green-900">{performanceAvg.toFixed(2)}</p>
                 <p className="text-xs text-gray-500 mt-1">点</p>
               </div>
               <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">行動評価平均</p>
+                <p className="text-sm text-gray-600 mb-1">{getCategoryName('behavior', categoryMasters)}平均</p>
                 <p className="text-3xl font-bold text-purple-900">{behaviorAvg.toFixed(2)}</p>
                 <p className="text-xs text-gray-500 mt-1">点</p>
               </div>
               <div className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">成長評価平均</p>
+                <p className="text-sm text-gray-600 mb-1">{getCategoryName('growth', categoryMasters)}平均</p>
                 <p className="text-3xl font-bold text-orange-900">{growthAvg.toFixed(2)}</p>
                 <p className="text-xs text-gray-500 mt-1">点</p>
               </div>
@@ -226,24 +253,26 @@ export default async function QuarterlyReportDetailPage({
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-3 mt-3">
-                    <div className="text-center p-2 bg-green-50 rounded">
-                      <p className="text-xs text-gray-600">成果評価</p>
-                      <p className="text-lg font-semibold text-green-900">
-                        {evaluation.performance_score?.toFixed(2) || '-'}
-                      </p>
-                    </div>
-                    <div className="text-center p-2 bg-purple-50 rounded">
-                      <p className="text-xs text-gray-600">行動評価</p>
-                      <p className="text-lg font-semibold text-purple-900">
-                        {evaluation.behavior_score?.toFixed(2) || '-'}
-                      </p>
-                    </div>
-                    <div className="text-center p-2 bg-orange-50 rounded">
-                      <p className="text-xs text-gray-600">成長評価</p>
-                      <p className="text-lg font-semibold text-orange-900">
-                        {evaluation.growth_score?.toFixed(2) || '-'}
-                      </p>
-                    </div>
+                    {categoryMasters.map((category) => {
+                      const scoreKey = `${category.category_key}_score` as keyof typeof evaluation
+                      const score = evaluation[scoreKey] as number | null | undefined
+
+                      const colorMap: Record<string, { bg: string; text: string }> = {
+                        performance: { bg: 'bg-green-50', text: 'text-green-900' },
+                        behavior: { bg: 'bg-purple-50', text: 'text-purple-900' },
+                        growth: { bg: 'bg-orange-50', text: 'text-orange-900' },
+                      }
+                      const colors = colorMap[category.category_key] || { bg: 'bg-blue-50', text: 'text-blue-900' }
+
+                      return (
+                        <div key={category.category_key} className={`text-center p-2 ${colors.bg} rounded`}>
+                          <p className="text-xs text-gray-600">{category.category_label}</p>
+                          <p className={`text-lg font-semibold ${colors.text}`}>
+                            {score?.toFixed(2) || '-'}
+                          </p>
+                        </div>
+                      )
+                    })}
                   </div>
                   <div className="mt-3 flex justify-end">
                     <Link href={`/admin/evaluations/${params.staffId}?year=${year}&month=${month}`}>

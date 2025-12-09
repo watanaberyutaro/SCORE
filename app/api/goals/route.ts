@@ -42,6 +42,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // ユーザーのcompany_idを取得
+    const { data: userData } = await supabase
+      .from('users')
+      .select('company_id')
+      .eq('id', user.id)
+      .single()
+
+    if (!userData) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
     const body = await request.json()
     const { goal_title, goal_description, target_date } = body
 
@@ -49,6 +60,7 @@ export async function POST(request: NextRequest) {
       .from('staff_goals')
       .insert({
         staff_id: user.id,
+        company_id: userData.company_id,
         goal_title,
         goal_description,
         target_date,

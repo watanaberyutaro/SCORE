@@ -48,14 +48,28 @@ export default function QuestionsManagementPage() {
   async function fetchQuestions() {
     try {
       setLoading(true)
+
+      // 現在のユーザーの企業IDを取得
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) throw new Error('ユーザーが見つかりません')
+
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('company_id')
+        .eq('id', userData.user.id)
+        .single()
+
+      if (!currentUser) throw new Error('ユーザー情報が見つかりません')
+
       const { data, error } = await supabase
         .from('evaluation_questions')
         .select(`
           *,
-          staff:users!evaluation_questions_staff_id_fkey(full_name, email),
+          staff:users!evaluation_questions_staff_id_fkey(full_name, email, company_id),
           admin:users!evaluation_questions_admin_id_fkey(full_name),
           evaluation:evaluations(evaluation_period)
         `)
+        .eq('company_id', currentUser.company_id) // 自社のデータのみ取得
         .order('created_at', { ascending: false })
 
       if (error) throw error

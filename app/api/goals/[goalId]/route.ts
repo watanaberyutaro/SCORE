@@ -62,7 +62,7 @@ export async function PATCH(
     // 管理者かどうかを確認
     const { data: userData } = await supabase
       .from('users')
-      .select('role')
+      .select('role, company_id')
       .eq('id', user.id)
       .single()
 
@@ -88,10 +88,12 @@ export async function PATCH(
       }
     }
 
+    // 同じ企業の目標のみ更新
     const { data: goal, error } = await supabase
       .from('staff_goals')
       .update(updateData)
       .eq('id', params.goalId)
+      .eq('company_id', userData.company_id)
       .select()
       .single()
 

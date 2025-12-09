@@ -2,9 +2,10 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { getRankColor } from '@/lib/utils/evaluation-calculator'
+import { getRankColor, getAllRanks, type RankSetting } from '@/lib/utils/evaluation-calculator'
 import { BarChart3, Users, TrendingUp, Award, Target, PieChart, Activity, TrendingDown, Trophy } from 'lucide-react'
 import type { EvaluationRank } from '@/types'
+import { getCategoryName, type CategoryMaster } from '@/lib/utils/category-mapper'
 
 async function getAnalyticsData() {
   const supabase = await createSupabaseServerClient()
@@ -58,7 +59,7 @@ async function getAnalyticsData() {
   const filteredEvaluations = evaluations?.filter(e => e.staff?.company_id === currentUser.company_id)
 
   // 部門別の統計
-  const departmentStats = (evaluations || []).reduce((acc: any, evaluation: any) => {
+  const departmentStats = (filteredEvaluations || []).reduce((acc: any, evaluation: any) => {
     const dept = evaluation.staff.department || '未分類'
     if (!acc[dept]) {
       acc[dept] = {
@@ -86,7 +87,7 @@ async function getAnalyticsData() {
   }, {})
 
   // ランク別の分布
-  const rankDistribution = (evaluations || []).reduce((acc: any, evaluation: any) => {
+  const rankDistribution = (filteredEvaluations || []).reduce((acc: any, evaluation: any) => {
     const rank = evaluation.rank || '未評価'
     acc[rank] = (acc[rank] || 0) + 1
     return acc
@@ -101,7 +102,7 @@ async function getAnalyticsData() {
     '60未満': 0,
   }
 
-  ;(evaluations || []).forEach((e: any) => {
+  ;(filteredEvaluations || []).forEach((e: any) => {
     const score = e.total_score || 0
     if (score >= 90) scoreRanges['90-100']++
     else if (score >= 80) scoreRanges['80-89']++
@@ -111,7 +112,7 @@ async function getAnalyticsData() {
   })
 
   // 月次推移データ
-  const monthlyTrend = (evaluations || []).reduce((acc: any, evaluation: any) => {
+  const monthlyTrend = (filteredEvaluations || []).reduce((acc: any, evaluation: any) => {
     const key = `${evaluation.evaluation_year}-${String(evaluation.evaluation_month).padStart(2, '0')}`
     if (!acc[key]) {
       acc[key] = {
@@ -141,7 +142,7 @@ async function getAnalyticsData() {
   }))
 
   // スコア統計
-  const scores = (evaluations || []).map((e: any) => e.total_score || 0)
+  const scores = (filteredEvaluations || []).map((e: any) => e.total_score || 0)
   const averageScore = scores.length > 0 ? scores.reduce((a: number, b: number) => a + b, 0) / scores.length : 0
   const maxScore = scores.length > 0 ? Math.max(...scores) : 0
   const minScore = scores.length > 0 ? Math.min(...scores) : 0
@@ -153,9 +154,9 @@ async function getAnalyticsData() {
   const standardDeviation = Math.sqrt(variance)
 
   // カテゴリ別平均スコア
-  const performanceScores = (evaluations || []).map((e: any) => e.performance_score || 0).filter(s => s > 0)
-  const behaviorScores = (evaluations || []).map((e: any) => e.behavior_score || 0).filter(s => s > 0)
-  const growthScores = (evaluations || []).map((e: any) => e.growth_score || 0).filter(s => s > 0)
+  const performanceScores = (filteredEvaluations || []).map((e: any) => e.performance_score || 0).filter(s => s > 0)
+  const behaviorScores = (filteredEvaluations || []).map((e: any) => e.behavior_score || 0).filter(s => s > 0)
+  const growthScores = (filteredEvaluations || []).map((e: any) => e.growth_score || 0).filter(s => s > 0)
 
   const avgPerformance = performanceScores.length > 0
     ? performanceScores.reduce((a, b) => a + b, 0) / performanceScores.length
@@ -167,10 +168,40 @@ async function getAnalyticsData() {
     ? growthScores.reduce((a, b) => a + b, 0) / growthScores.length
     : 0
 
+  // ランク設定を取得
+  const { data: rankSettings } = await supabase
+    .from('rank_settings')
+    .select('rank_name, min_score, amount, display_order')
+    .eq('company_id', currentUser.company_id)
+    .order('display_order', { ascending: false })
+
+  // カテゴリマスターを取得
+  const { data: categoryMasters } = await supabase
+    .from('evaluation_categories')
+    .select('id, category_key, category_label, display_order, description')
+    .eq('company_id', currentUser.company_id)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+
+  // 評価項目マスターを取得（カテゴリ別の最大点を計算するため）
+  const { data: itemsMaster } = await supabase
+    .from('evaluation_items_master')
+    .select('category, max_score')
+    .eq('company_id', currentUser.company_id)
+
+  // カテゴリ別の最大点を計算
+  const categoryMaxScores = (itemsMaster || []).reduce((acc: any, item: any) => {
+    if (!acc[item.category]) {
+      acc[item.category] = 0
+    }
+    acc[item.category] += item.max_score || 0
+    return acc
+  }, {})
+
   return {
     fiscalYearStart,
     fiscalYearEnd,
-    totalEvaluations: evaluations?.length || 0,
+    totalEvaluations: filteredEvaluations?.length || 0,
     averageScore,
     maxScore,
     minScore,
@@ -184,16 +215,25 @@ async function getAnalyticsData() {
       behavior: avgBehavior,
       growth: avgGrowth,
     },
-    topPerformers: (evaluations || [])
+    topPerformers: (filteredEvaluations || [])
       .sort((a: any, b: any) => (b.total_score || 0) - (a.total_score || 0))
       .slice(0, 10),
+    rankSettings: (rankSettings || []) as RankSetting[],
+    categoryMasters: (categoryMasters || []) as CategoryMaster[],
+    categoryMaxScores,
   }
 }
 
 export default async function AdminAnalyticsPage() {
   const data = await getAnalyticsData()
 
-  const rankOrder: EvaluationRank[] = ['SS', 'S', 'A+', 'A', 'A-', 'B', 'C', 'D']
+  // 動的にランクを取得
+  const allRanks = getAllRanks(data.rankSettings)
+
+  // カテゴリ別の最大点を取得（デフォルトも設定）
+  const performanceMax = data.categoryMaxScores['performance'] || 48
+  const behaviorMax = data.categoryMaxScores['behavior'] || 30
+  const growthMax = data.categoryMaxScores['growth'] || 22
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 lg:py-8">
@@ -265,14 +305,16 @@ export default async function AdminAnalyticsPage() {
             <Target className="h-5 w-5" style={{ color: '#05a7be' }} />
             カテゴリ別平均スコア
           </CardTitle>
-          <CardDescription className="text-xs lg:text-sm text-black">成果・行動・成長の各カテゴリ分析</CardDescription>
+          <CardDescription className="text-xs lg:text-sm text-black">
+            {getCategoryName('performance', data.categoryMasters)}・{getCategoryName('behavior', data.categoryMasters)}・{getCategoryName('growth', data.categoryMasters)}の各カテゴリ分析
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-3 lg:p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 lg:gap-4">
             <div className="p-3 lg:p-4 rounded-lg border-2" style={{ borderColor: '#05a7be', backgroundColor: 'rgba(5, 167, 190, 0.05)' }}>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs lg:text-sm font-semibold text-black">成果評価</h4>
-                <Badge className="bg-[#05a7be] text-white text-xs">48点満点</Badge>
+                <h4 className="text-xs lg:text-sm font-semibold text-black">{getCategoryName('performance', data.categoryMasters)}</h4>
+                <Badge className="bg-[#05a7be] text-white text-xs">{performanceMax}点満点</Badge>
               </div>
               <div className="text-2xl lg:text-3xl font-bold text-black">
                 {data.categoryAverages.performance.toFixed(1)}点
@@ -281,20 +323,20 @@ export default async function AdminAnalyticsPage() {
                 <div
                   className="h-2 rounded-full"
                   style={{
-                    width: `${(data.categoryAverages.performance / 48) * 100}%`,
+                    width: `${(data.categoryAverages.performance / performanceMax) * 100}%`,
                     background: 'linear-gradient(to right, #05a7be, #18c4b8)',
                   }}
                 />
               </div>
               <p className="text-[10px] lg:text-xs text-gray-600 mt-1">
-                達成率: {((data.categoryAverages.performance / 48) * 100).toFixed(1)}%
+                達成率: {((data.categoryAverages.performance / performanceMax) * 100).toFixed(1)}%
               </p>
             </div>
 
             <div className="p-3 lg:p-4 rounded-lg border-2" style={{ borderColor: '#18c4b8', backgroundColor: 'rgba(24, 196, 184, 0.05)' }}>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs lg:text-sm font-semibold text-black">行動評価</h4>
-                <Badge className="bg-[#18c4b8] text-white text-xs">30点満点</Badge>
+                <h4 className="text-xs lg:text-sm font-semibold text-black">{getCategoryName('behavior', data.categoryMasters)}</h4>
+                <Badge className="bg-[#18c4b8] text-white text-xs">{behaviorMax}点満点</Badge>
               </div>
               <div className="text-2xl lg:text-3xl font-bold text-black">
                 {data.categoryAverages.behavior.toFixed(1)}点
@@ -303,20 +345,20 @@ export default async function AdminAnalyticsPage() {
                 <div
                   className="h-2 rounded-full"
                   style={{
-                    width: `${(data.categoryAverages.behavior / 30) * 100}%`,
+                    width: `${(data.categoryAverages.behavior / behaviorMax) * 100}%`,
                     background: 'linear-gradient(to right, #18c4b8, #1ed7cd)',
                   }}
                 />
               </div>
               <p className="text-[10px] lg:text-xs text-gray-600 mt-1">
-                達成率: {((data.categoryAverages.behavior / 30) * 100).toFixed(1)}%
+                達成率: {((data.categoryAverages.behavior / behaviorMax) * 100).toFixed(1)}%
               </p>
             </div>
 
             <div className="p-3 lg:p-4 rounded-lg border-2" style={{ borderColor: '#1ed7cd', backgroundColor: 'rgba(30, 215, 205, 0.05)' }}>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs lg:text-sm font-semibold text-black">成長評価</h4>
-                <Badge className="bg-[#1ed7cd] text-black text-xs">22点満点</Badge>
+                <h4 className="text-xs lg:text-sm font-semibold text-black">{getCategoryName('growth', data.categoryMasters)}</h4>
+                <Badge className="bg-[#1ed7cd] text-black text-xs">{growthMax}点満点</Badge>
               </div>
               <div className="text-2xl lg:text-3xl font-bold text-black">
                 {data.categoryAverages.growth.toFixed(1)}点
@@ -325,13 +367,13 @@ export default async function AdminAnalyticsPage() {
                 <div
                   className="h-2 rounded-full"
                   style={{
-                    width: `${(data.categoryAverages.growth / 22) * 100}%`,
+                    width: `${(data.categoryAverages.growth / growthMax) * 100}%`,
                     background: 'linear-gradient(to right, #1ed7cd, #05a7be)',
                   }}
                 />
               </div>
               <p className="text-[10px] lg:text-xs text-gray-600 mt-1">
-                達成率: {((data.categoryAverages.growth / 22) * 100).toFixed(1)}%
+                達成率: {((data.categoryAverages.growth / growthMax) * 100).toFixed(1)}%
               </p>
             </div>
           </div>
@@ -406,13 +448,13 @@ export default async function AdminAnalyticsPage() {
                       </span>
                       <div className="flex items-center gap-2 lg:gap-3">
                         <Badge variant="outline" className="bg-[#05a7be] text-white border-0 text-xs">
-                          成果: {month.avgPerformance.toFixed(1)}
+                          {getCategoryName('performance', data.categoryMasters)}: {month.avgPerformance.toFixed(1)}
                         </Badge>
                         <Badge variant="outline" className="bg-[#18c4b8] text-white border-0 text-xs">
-                          行動: {month.avgBehavior.toFixed(1)}
+                          {getCategoryName('behavior', data.categoryMasters)}: {month.avgBehavior.toFixed(1)}
                         </Badge>
                         <Badge variant="outline" className="bg-[#1ed7cd] text-black border-0 text-xs">
-                          成長: {month.avgGrowth.toFixed(1)}
+                          {getCategoryName('growth', data.categoryMasters)}: {month.avgGrowth.toFixed(1)}
                         </Badge>
                         <span className="text-sm lg:text-base font-bold text-black w-12 lg:w-16 text-right">
                           {month.avgTotal.toFixed(1)}
@@ -423,26 +465,26 @@ export default async function AdminAnalyticsPage() {
                       <div
                         className="flex items-center justify-center text-xs font-bold text-white"
                         style={{
-                          width: `${(month.avgPerformance / 48) * 48}%`,
+                          width: `${(month.avgPerformance / performanceMax) * (performanceMax / (performanceMax + behaviorMax + growthMax)) * 100}%`,
                           backgroundColor: '#05a7be',
                         }}
-                        title={`成果: ${month.avgPerformance.toFixed(1)}点`}
+                        title={`${getCategoryName('performance', data.categoryMasters)}: ${month.avgPerformance.toFixed(1)}点`}
                       />
                       <div
                         className="flex items-center justify-center text-xs font-bold text-white"
                         style={{
-                          width: `${(month.avgBehavior / 30) * 30}%`,
+                          width: `${(month.avgBehavior / behaviorMax) * (behaviorMax / (performanceMax + behaviorMax + growthMax)) * 100}%`,
                           backgroundColor: '#18c4b8',
                         }}
-                        title={`行動: ${month.avgBehavior.toFixed(1)}点`}
+                        title={`${getCategoryName('behavior', data.categoryMasters)}: ${month.avgBehavior.toFixed(1)}点`}
                       />
                       <div
                         className="flex items-center justify-center text-xs font-bold text-black"
                         style={{
-                          width: `${(month.avgGrowth / 22) * 22}%`,
+                          width: `${(month.avgGrowth / growthMax) * (growthMax / (performanceMax + behaviorMax + growthMax)) * 100}%`,
                           backgroundColor: '#1ed7cd',
                         }}
-                        title={`成長: ${month.avgGrowth.toFixed(1)}点`}
+                        title={`${getCategoryName('growth', data.categoryMasters)}: ${month.avgGrowth.toFixed(1)}点`}
                       />
                     </div>
                     <div className="flex justify-between text-[10px] text-gray-500">
@@ -469,15 +511,15 @@ export default async function AdminAnalyticsPage() {
           </CardHeader>
           <CardContent className="p-3 lg:p-6">
             <div className="space-y-2 lg:space-y-3">
-              {rankOrder.map((rank) => {
-                const count = data.rankDistribution[rank] || 0
+              {allRanks.map((rankSetting) => {
+                const count = data.rankDistribution[rankSetting.rank_name] || 0
                 const percentage =
                   data.totalEvaluations > 0 ? (count / data.totalEvaluations) * 100 : 0
 
                 return (
-                  <div key={rank} className="flex items-center justify-between gap-2">
+                  <div key={rankSetting.rank_name} className="flex items-center justify-between gap-2">
                     <div className="flex items-center space-x-1.5 lg:space-x-2 min-w-[80px]">
-                      <Badge className={`${getRankColor(rank)} text-xs`}>{rank}</Badge>
+                      <Badge className={`${getRankColor(rankSetting.rank_name, data.rankSettings)} text-xs text-white`}>{rankSetting.rank_name}</Badge>
                       <span className="text-xs lg:text-sm font-medium text-black">{count}名</span>
                     </div>
                     <div className="flex items-center space-x-1.5 lg:space-x-2 flex-1">
@@ -532,15 +574,15 @@ export default async function AdminAnalyticsPage() {
                     </div>
                     <div className="grid grid-cols-3 gap-2 mt-2">
                       <div className="text-center p-1.5 lg:p-2 rounded" style={{ backgroundColor: 'rgba(5, 167, 190, 0.1)' }}>
-                        <p className="text-[10px] lg:text-xs text-gray-600">成果</p>
+                        <p className="text-[10px] lg:text-xs text-gray-600">{getCategoryName('performance', data.categoryMasters)}</p>
                         <p className="text-xs lg:text-sm font-bold text-black">{avgPerformance.toFixed(1)}</p>
                       </div>
                       <div className="text-center p-1.5 lg:p-2 rounded" style={{ backgroundColor: 'rgba(24, 196, 184, 0.1)' }}>
-                        <p className="text-[10px] lg:text-xs text-gray-600">行動</p>
+                        <p className="text-[10px] lg:text-xs text-gray-600">{getCategoryName('behavior', data.categoryMasters)}</p>
                         <p className="text-xs lg:text-sm font-bold text-black">{avgBehavior.toFixed(1)}</p>
                       </div>
                       <div className="text-center p-1.5 lg:p-2 rounded" style={{ backgroundColor: 'rgba(30, 215, 205, 0.1)' }}>
-                        <p className="text-[10px] lg:text-xs text-gray-600">成長</p>
+                        <p className="text-[10px] lg:text-xs text-gray-600">{getCategoryName('growth', data.categoryMasters)}</p>
                         <p className="text-xs lg:text-sm font-bold text-black">{avgGrowth.toFixed(1)}</p>
                       </div>
                     </div>
@@ -586,7 +628,7 @@ export default async function AdminAnalyticsPage() {
                       {evaluation.total_score?.toFixed(1)}点
                     </TableCell>
                     <TableCell>
-                      <Badge className={getRankColor(evaluation.rank)}>
+                      <Badge className={`${getRankColor(evaluation.rank, data.rankSettings)} text-white`}>
                         {evaluation.rank}
                       </Badge>
                     </TableCell>
@@ -605,7 +647,7 @@ export default async function AdminAnalyticsPage() {
                     <span className="text-sm font-bold text-gray-500">#{index + 1}</span>
                     <span className="font-medium text-sm">{evaluation.staff.full_name}</span>
                   </div>
-                  <Badge className={`${getRankColor(evaluation.rank)} text-xs`}>
+                  <Badge className={`${getRankColor(evaluation.rank, data.rankSettings)} text-white text-xs`}>
                     {evaluation.rank}
                   </Badge>
                 </div>

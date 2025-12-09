@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { getRankColor, getAllRanks, type RankSetting } from '@/lib/utils/evaluation-calculator'
 
 interface DashboardClientProps {
   data: {
@@ -22,20 +23,21 @@ interface DashboardClientProps {
     completedInterviews: number
     totalGoals: number
     unansweredQuestions: number
+    rankSettings: RankSetting[]
   }
 }
 
 export function DashboardClient({ data }: DashboardClientProps) {
   const [activeTab, setActiveTab] = useState('pending')
 
-  // ランク分布の計算
-  const rankDistribution = {
-    S: data.completedUsers.filter(e => e.rank === 'S').length,
-    A: data.completedUsers.filter(e => e.rank === 'A').length,
-    B: data.completedUsers.filter(e => e.rank === 'B').length,
-    C: data.completedUsers.filter(e => e.rank === 'C').length,
-    D: data.completedUsers.filter(e => e.rank === 'D').length,
-  }
+  // ランク設定を取得（カスタムまたはデフォルト）
+  const allRanks = getAllRanks(data.rankSettings)
+
+  // ランク分布の計算（動的）
+  const rankDistribution: Record<string, number> = {}
+  allRanks.forEach(rank => {
+    rankDistribution[rank.rank_name] = data.completedUsers.filter(e => e.rank === rank.rank_name).length
+  })
 
   // 平均スコアの計算
   const averageScore = data.completedUsers.length > 0
@@ -193,23 +195,19 @@ export function DashboardClient({ data }: DashboardClientProps) {
             <CardContent>
               {data.completedEvaluations > 0 ? (
                 <div className="space-y-3">
-                  {[
-                    { rank: 'S', color: '#017598', label: 'S評価' },
-                    { rank: 'A', color: '#087ea2', label: 'A評価' },
-                    { rank: 'B', color: '#05a7be', label: 'B評価' },
-                    { rank: 'C', color: '#18c4b8', label: 'C評価' },
-                    { rank: 'D', color: '#1ed7cd', label: 'D評価' },
-                  ].map((item) => {
-                    const count = rankDistribution[item.rank as keyof typeof rankDistribution]
+                  {allRanks.map((rankSetting) => {
+                    const count = rankDistribution[rankSetting.rank_name] || 0
                     const percentage = (count / data.completedEvaluations) * 100
+                    const colorClass = getRankColor(rankSetting.rank_name, data.rankSettings)
+
                     return (
-                      <div key={item.rank}>
+                      <div key={rankSetting.rank_name}>
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            <Badge style={{ backgroundColor: item.color, color: '#fff', borderColor: item.color }}>
-                              {item.rank}
+                            <Badge className={`${colorClass} text-white`}>
+                              {rankSetting.rank_name}
                             </Badge>
-                            <span className="text-sm font-medium text-black">{item.label}</span>
+                            <span className="text-sm font-medium text-black">{rankSetting.rank_name}評価</span>
                           </div>
                           <span className="text-sm font-bold text-black">
                             {count}名 ({percentage.toFixed(0)}%)
@@ -217,9 +215,8 @@ export function DashboardClient({ data }: DashboardClientProps) {
                         </div>
                         <div className="w-full rounded-full h-2" style={{ backgroundColor: '#1ed7cd33' }}>
                           <div
-                            className="h-2 rounded-full transition-all"
+                            className={`h-2 rounded-full transition-all ${colorClass}`}
                             style={{
-                              backgroundColor: item.color,
                               width: `${percentage}%`
                             }}
                           />
@@ -323,10 +320,7 @@ export function DashboardClient({ data }: DashboardClientProps) {
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-black">{staff.staff.full_name}</p>
                           {staff.rank && (
-                            <Badge style={{
-                              backgroundColor: '#05a7be',
-                              color: '#fff'
-                            }}>
+                            <Badge className={`${getRankColor(staff.rank, data.rankSettings)} text-white`}>
                               {staff.rank}
                             </Badge>
                           )}
@@ -376,11 +370,7 @@ export function DashboardClient({ data }: DashboardClientProps) {
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-black">{staff.staff.full_name}</p>
                           {staff.rank && (
-                            <Badge variant="outline" style={{
-                              backgroundColor: 'rgba(8, 126, 162, 0.2)',
-                              color: '#000',
-                              borderColor: '#087ea2'
-                            }}>
+                            <Badge className={`${getRankColor(staff.rank, data.rankSettings)} text-white`}>
                               {staff.rank}
                             </Badge>
                           )}
@@ -534,10 +524,7 @@ export function DashboardClient({ data }: DashboardClientProps) {
                               完了
                             </Badge>
                             {evaluation.rank && (
-                              <Badge style={{
-                                backgroundColor: '#05a7be',
-                                color: '#fff'
-                              }}>
+                              <Badge className={`${getRankColor(evaluation.rank, data.rankSettings)} text-white`}>
                                 {evaluation.rank}
                               </Badge>
                             )}
