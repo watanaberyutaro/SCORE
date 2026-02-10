@@ -45,9 +45,14 @@ export function DynamicEvaluationForm({
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
   const [existingEvaluation, setExistingEvaluation] = useState<any>(null)
+  const [previousMonthEvaluation, setPreviousMonthEvaluation] = useState<any>(null)
+  const [staffGoals, setStaffGoals] = useState<any[]>([])
+  const [loadingPreviousData, setLoadingPreviousData] = useState(true)
 
   useEffect(() => {
     fetchEvaluationData()
+    fetchPreviousMonthEvaluation()
+    fetchStaffGoals()
   }, [staffId, evaluationYear, evaluationMonth])
 
   async function fetchEvaluationData() {
@@ -123,6 +128,76 @@ export function DynamicEvaluationForm({
     }
   }
 
+  async function fetchPreviousMonthEvaluation() {
+    try {
+      setLoadingPreviousData(true)
+
+      // Get current logged-in admin
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) {
+        return
+      }
+
+      // Calculate previous month
+      let prevYear = evaluationYear
+      let prevMonth = evaluationMonth - 1
+      if (prevMonth === 0) {
+        prevMonth = 12
+        prevYear = evaluationYear - 1
+      }
+
+      // Fetch previous month's evaluation
+      const { data: prevEvaluation } = await supabase
+        .from('evaluations')
+        .select('*')
+        .eq('staff_id', staffId)
+        .eq('evaluation_year', prevYear)
+        .eq('evaluation_month', prevMonth)
+        .single()
+
+      if (prevEvaluation) {
+        // Fetch only the current admin's response for the previous month
+        const { data: myResponse } = await supabase
+          .from('evaluation_responses')
+          .select(`
+            *,
+            admin:users!evaluation_responses_admin_id_fkey(full_name),
+            items:evaluation_items(*)
+          `)
+          .eq('evaluation_id', prevEvaluation.id)
+          .eq('admin_id', userData.user.id)
+          .not('submitted_at', 'is', null)
+          .single()
+
+        if (myResponse) {
+          setPreviousMonthEvaluation({
+            ...prevEvaluation,
+            myResponse: myResponse
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching previous month evaluation:', error)
+    } finally {
+      setLoadingPreviousData(false)
+    }
+  }
+
+  async function fetchStaffGoals() {
+    try {
+      const { data: goals } = await supabase
+        .from('staff_goals')
+        .select('*')
+        .eq('staff_id', staffId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+
+      setStaffGoals(goals || [])
+    } catch (error) {
+      console.error('Error fetching staff goals:', error)
+    }
+  }
+
   const handleScoreChange = (itemId: string, value: string) => {
     const numValue = parseFloat(value) || 0
     setScores(prev => ({ ...prev, [itemId]: numValue }))
@@ -179,6 +254,33 @@ export function DynamicEvaluationForm({
 
   return (
     <div className="space-y-6">
+      {/* スタッフの目標表示 */}
+      {staffGoals.length > 0 && (
+        <Card className="border-2" style={{ borderColor: '#f59e0b' }}>
+          <CardHeader>
+            <CardTitle className="text-lg text-black">📋 現在の目標</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {staffGoals.map((goal) => (
+                <div key={goal.id} className="p-3 bg-amber-50 rounded-md">
+                  <h4 className="font-semibold text-black">{goal.goal_title}</h4>
+                  <p className="text-sm text-gray-600 mt-1">{goal.goal_description}</p>
+                  <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                    <span>目標期日: {new Date(goal.target_date).toLocaleDateString('ja-JP')}</span>
+                    <span>達成率: {goal.achievement_rate}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 2カラムレイアウト */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 左側: 評価フォーム (2/3の幅) */}
+        <div className="lg:col-span-2 space-y-6">
       {/* ヘッダー */}
       <Card className="border-2" style={{ borderColor: '#05a7be' }}>
         <CardHeader>
@@ -285,6 +387,84 @@ export function DynamicEvaluationForm({
         >
           {submitting ? '提出中...' : '評価を提出'}
         </Button>
+      </div>
+        </div>
+
+        {/* 右側: 前月の評価 (1/3の幅) */}
+        <div className="lg:col-span-1">
+          <div className="sticky top-4">
+            <Card className="border-2" style={{ borderColor: '#9333ea' }}>
+              <CardHeader>
+                <CardTitle className="text-lg text-black">📊 前月の評価</CardTitle>
+                <CardDescription className="text-black">
+                  {evaluationMonth === 1 ? `${evaluationYear - 1}年12月` : `${evaluationYear}年${evaluationMonth - 1}月`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingPreviousData ? (
+                  <p className="text-sm text-gray-500">読み込み中...</p>
+                ) : previousMonthEvaluation?.myResponse ? (
+                  <div className="space-y-4">
+                    {/* あなたの評価スコア */}
+                    <div className="p-4 bg-purple-50 rounded-lg">
+                      <p className="text-xs text-gray-500 mb-1">あなたが入力した評価</p>
+                      <p className="text-sm text-gray-600">スコア</p>
+                      <p className="text-3xl font-bold" style={{ color: '#9333ea' }}>
+                        {previousMonthEvaluation.myResponse.total_score?.toFixed(1) || '0.0'}点
+                      </p>
+                    </div>
+
+                    {/* カテゴリ別スコア */}
+                    {previousMonthEvaluation.myResponse.items && (
+                      <div className="space-y-3">
+                        <h4 className="font-semibold text-sm text-gray-700">カテゴリ別スコア</h4>
+                        {categories.map((category) => {
+                          const categoryItems = previousMonthEvaluation.myResponse.items?.filter(
+                            (item: any) => item.category === category.category_key
+                          ) || []
+                          const categoryTotal = categoryItems.reduce((sum: number, item: any) => sum + (item.score || 0), 0)
+
+                          if (categoryItems.length === 0) return null
+
+                          return (
+                            <div key={category.id} className="p-3 bg-gray-50 rounded">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-gray-700">{category.category_label}</span>
+                                <span className="text-lg font-bold text-purple-600">{categoryTotal.toFixed(1)}点</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* 評価項目の詳細 */}
+                    {previousMonthEvaluation.myResponse.items && (
+                      <div className="space-y-3">
+                        <h4 className="font-semibold text-sm text-gray-700">評価項目の詳細</h4>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {previousMonthEvaluation.myResponse.items?.map((item: any, index: number) => (
+                            <div key={index} className="p-2 bg-white border border-gray-200 rounded text-xs">
+                              <div className="flex justify-between items-start">
+                                <span className="font-medium text-gray-700">{item.item_name}</span>
+                                <span className="font-bold text-purple-600">{item.score}点</span>
+                              </div>
+                              {item.comment && (
+                                <p className="mt-1 text-gray-600 italic">💬 {item.comment}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">前月のあなたの評価データがありません</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   )
